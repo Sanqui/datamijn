@@ -23,6 +23,8 @@ field: name field_params type _NL -> field
 ?type: NAME                -> type
     | "{" _NL field+ "}"   -> typedef
 
+// XXX does count pointer make sense?
+
 field_params:
     | count
     | pointer

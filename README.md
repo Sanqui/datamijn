@@ -40,6 +40,22 @@ positions   [8]{
 In this example, we haven't defined `_start`, so datamijn starts
 parsing the file from the first field.
 
+A binary file parsed with such a definition might end up looking
+like this pleasant YAML.
+
+```yaml
+version: 1
+positions:
+- x: 20
+  y: 26
+- x: 26
+  y: 26
+...
+```
+
+**Datamijn is not stable!**  The language and API will change
+on a whim depending on what Sanqui likes and needs (until v1.0).
+
 Acknowledgements
 ----------------
 
