@@ -8,6 +8,5 @@ position {
 
 _start       {
     version     u16
-    pos1        position
-    pos2        position
+    positions   [2]position
 }

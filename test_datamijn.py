@@ -22,14 +22,28 @@ position  {
     assert result.position.x == 0x10
     assert result.position.y == 0x20
 
+def test_array():
+    dm = """bytes   [6]u8"""
+    
+    result = datamijn.parse(dm, b"\x01\x02\x03\x04\x05\x06")
+    assert dm.bytes == [1,2,3,4,5,6]
+
 def test_complex():
     result = datamijn.parse(open("test/test.dm"),
         open("test/test.bin", "rb"))
     assert result.version == 0x123
-    assert result.pos1.x == 1
-    assert result.pos1.y == 2
-    assert result.pos1.nested.z == 3
-    assert result.pos2.x == 0x22
-    assert result.pos2.y == 0x33
-    assert result.pos2.nested.z == 0x44
+    # don't test the rest because
+    # it changes often
 
+def test_reuse():
+    dm = """
+a {
+    byte    u8
+}
+_start a"""
+    result = datamijn.parse(dm, b"\x00")
+    
+    with pytest.raises(KeyError):
+        dm2 = "_start a"
+        result = datamijn.parse(dm2, b"\x00")
+        

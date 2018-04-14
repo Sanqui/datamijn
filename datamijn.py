@@ -31,13 +31,18 @@ class TreeToStruct(Transformer):
         type = f[1]
         
         field = name / type
-        field._name = name
+        
+        return field
+    
+    def field_array(self, f):
+        name = f[0].value
+        count = eval(f[1].value)
+        type = f[2]
+        
+        field = name / type[count]
         
         return field
         
-# https://github.com/yaml/pyyaml/issues/110
-# https://github.com/yaml/pyyaml/pull/143        
-
 grammar = open("grammar.g").read()
 
 def container_representer(dumper, data):
@@ -45,6 +50,10 @@ def container_representer(dumper, data):
     return dumper.represent_data(dict(data))
     #return dumper.serialize(dict(data))
 yaml.add_representer(Container, container_representer)
+def list_container_representer(dumper, data):
+    return dumper.represent_data(list(data))
+    #return dumper.serialize(dict(data))
+yaml.add_representer(ListContainer, list_container_representer)
 
 def parse(definition, data):
     # XXX the parser should be done outside - but
@@ -65,7 +74,7 @@ def parse(definition, data):
         structs = [tree]
 
     for struct in structs:
-        structs_by_name[struct._name] = struct
+        structs_by_name[struct.name] = struct
     
     start = None
     if "_start" in structs_by_name:
