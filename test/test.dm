@@ -6,12 +6,18 @@ coords {
     }
 }
 
+val_ptr {
+    _ptr         u16
+    val          @_ptr u8
+}
+
 _start       {
     version         u16
     positions       [0x2]coords
     version_again   @0x0 u16
-    aa_ptr          u16
-    aa              @aa_ptr u8
+    val_ptr         u16
+    val_count       u8
+    vals            @val_ptr [val_count]u8
     
 }
 

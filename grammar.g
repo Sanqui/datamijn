@@ -10,6 +10,7 @@ NUM: INT | SIGNED_INT
 // TODO: expressions should allow for math
 EXPR: NUM
 expr: EXPR -> eval
+ctx_name: NAME  -> ctx_value
 
 _NL: /(\r?\n[\t ]*)+/
 
@@ -28,6 +29,7 @@ field_params:
     | count pointer
     | pointer count
 
-count: "[" expr "]"     
+count: "[" expr "]"
+       | "[" ctx_name "]"
 pointer: "@" expr    
-       | "@" name   
+       | "@" ctx_name

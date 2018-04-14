@@ -66,6 +66,16 @@ val     @val_ptr u8
     result = datamijn.parse(db, data)
     assert result.val == 0xaa
 
+def test_dynamic_pointer_array():
+    db = """
+val_ptr         u16
+val_count       u8
+vals            @val_ptr [val_count] u8
+"""
+    data = b('1000' + '03' + '00'*13 + 'aabbcc')
+    result = datamijn.parse(db, data)
+    assert result.vals == [0xaa, 0xbb, 0xcc]
+
 def test_complex():
     result = datamijn.parse(open("test/test.dm"),
         open("test/test.bin", "rb"))

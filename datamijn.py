@@ -19,6 +19,12 @@ class TreeToStruct(Transformer):
     def eval(self, token):
         return eval(token[0])
     
+    def ctx_value(self, token):
+        def ctx_value(ref):
+            return lambda this: this[ref]
+        
+        return ctx_value(token[0].value)
+    
     def type(self, token):
         name = token[0]
         if name in CONSTRUCT_ALIASES:
@@ -46,11 +52,6 @@ class TreeToStruct(Transformer):
             type_ = type_[count]
         
         if pointer != None:
-            if type(pointer) != int:
-                def ctx_ptr(ref):
-                    return lambda this: this[ref]
-                
-                pointer = ctx_ptr(pointer.value)
             field = name / Pointer(pointer, type_)
         else:
             field = name / type_
