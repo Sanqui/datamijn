@@ -26,7 +26,25 @@ def test_array():
     dm = """bytes   [6]u8"""
     
     result = datamijn.parse(dm, b"\x01\x02\x03\x04\x05\x06")
-    assert dm.bytes == [1,2,3,4,5,6]
+    assert result.bytes == [1,2,3,4,5,6]
+
+def test_array_inline_typedef():
+    dm = """
+bytes   [2]{
+    a   u8
+    b   u8
+}"""
+    
+    result = datamijn.parse(dm, b"\x01\x02\x03\x04")
+    assert result.bytes[0].a == 1
+    assert result.bytes[0].b == 2
+    assert result.bytes[1].a == 3
+    assert result.bytes[1].b == 4
+
+def test_array_hex():
+    dm = "bytes [0xff]u8"
+    result = datamijn.parse(dm, b"\x01"*0xff)
+    assert len(result.bytes) == 0xff
 
 def test_complex():
     result = datamijn.parse(open("test/test.dm"),

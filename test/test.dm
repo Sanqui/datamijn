@@ -1,4 +1,4 @@
-position {
+coords {
     x       u8
     y       u8
     nested {
@@ -8,5 +8,5 @@ position {
 
 _start       {
     version     u16
-    positions   [2]position
+    positions   [0x2]coords
 }
