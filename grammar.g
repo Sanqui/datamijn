@@ -29,4 +29,5 @@ field_params:
     | pointer count
 
 count: "[" expr "]"     
-pointer: "@" expr       
+pointer: "@" expr    
+       | "@" name   

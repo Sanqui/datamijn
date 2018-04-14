@@ -41,14 +41,19 @@ class TreeToStruct(Transformer):
                 pointer = param.children[0]
             else:
                 raise ValueError(f"Unknown param type: {param.data}")
-        type = f[2]
+        type_ = f[2]
         if count != None:
-            type = type[count]
+            type_ = type_[count]
         
         if pointer != None:
-            field = name / Pointer(pointer, type)
+            if type(pointer) != int:
+                def ctx_ptr(ref):
+                    return lambda this: this[ref]
+                
+                pointer = ctx_ptr(pointer.value)
+            field = name / Pointer(pointer, type_)
         else:
-            field = name / type
+            field = name / type_
         
         return field
     
