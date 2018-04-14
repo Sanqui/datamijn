@@ -11,6 +11,13 @@ val_ptr {
     val          @_ptr u8
 }
 
+item_category   u8 enum {
+    none            0
+    potion          1
+    weapon          2
+    armor           3
+}
+
 _start       {
     version         u16
     positions       [0x2]coords
@@ -18,7 +25,7 @@ _start       {
     val_ptr         u16
     val_count       u8
     vals            @val_ptr [val_count]u8
-    
+    item_category   @0x20 item_category
 }
 
 

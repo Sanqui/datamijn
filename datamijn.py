@@ -32,8 +32,17 @@ class TreeToStruct(Transformer):
         else:
             return LazyBound(lambda: self.structs_by_name[name])
     
+    def enum(self, tree):
+        return dict(tree)
+    
+    def enum_field(self, tree):
+        return (tree[0].value, tree[1])
+    
     def typedef(self, tree):
         return Struct(*tree)
+    
+    def enum_type(self, tree):
+        return Enum(tree[0], **tree[1])
     
     def field(self, f):
         name = f[0].value
@@ -72,12 +81,14 @@ grammar = open("grammar.g").read()
 def container_representer(dumper, data):
     del data['_io']
     return dumper.represent_data(dict(data))
-    #return dumper.serialize(dict(data))
 yaml.add_representer(Container, container_representer)
 def list_container_representer(dumper, data):
     return dumper.represent_data(list(data))
-    #return dumper.serialize(dict(data))
 yaml.add_representer(ListContainer, list_container_representer)
+# TODO improve
+def enum_integer_string_representer(dumper, data):
+    return dumper.represent_data(str(data))
+yaml.add_representer(EnumIntegerString, enum_integer_string_representer)
 
 def parse(definition, data):
     # XXX the parser should be done outside - but

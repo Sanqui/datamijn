@@ -76,6 +76,17 @@ vals            @val_ptr [val_count] u8
     result = datamijn.parse(db, data)
     assert result.vals == [0xaa, 0xbb, 0xcc]
 
+def test_enum():
+    db = """
+test        u8 enum {
+    zero        0
+    one         1
+    two         2
+    three       3
+}"""
+    result = datamijn.parse(db, b("02"))
+    assert result.test == "two"
+
 def test_complex():
     result = datamijn.parse(open("test/test.dm"),
         open("test/test.bin", "rb"))
