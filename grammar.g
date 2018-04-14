@@ -9,18 +9,24 @@ SIGNED_INT: ["+"|"-"] INT
 NUM: INT | SIGNED_INT
 // TODO: expressions should allow for math
 EXPR: NUM
-
+expr: EXPR -> eval
 
 _NL: /(\r?\n[\t ]*)+/
 
 ?start: _NL* field*
 
-field: name type _NL          -> field
-     | name count type _NL    -> field_array
+field: name field_params type _NL -> field
 
 ?name: NAME
 
 ?type: NAME                -> type
     | "{" _NL field+ "}"   -> typedef
 
-?count: "[" EXPR "]"
+field_params:
+    | count
+    | pointer
+    | count pointer
+    | pointer count
+
+count: "[" expr "]"     
+pointer: "@" expr       

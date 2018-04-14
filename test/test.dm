@@ -7,6 +7,7 @@ coords {
 }
 
 _start       {
-    version     u16
-    positions   [0x2]coords
+    version       u16
+    positions     [0x2]coords
+    version_again @0x0 u16
 }

@@ -16,6 +16,9 @@ class TreeToStruct(Transformer):
     def __init__(self, structs_by_name):
         self.structs_by_name = structs_by_name
     
+    def eval(self, token):
+        return eval(token[0])
+    
     def type(self, token):
         name = token[0]
         if name in CONSTRUCT_ALIASES:
@@ -28,9 +31,24 @@ class TreeToStruct(Transformer):
     
     def field(self, f):
         name = f[0].value
-        type = f[1]
+        params = f[1]
+        count = None
+        pointer = None
+        for param in params.children:
+            if param.data == "count":
+                count = param.children[0]
+            elif param.data == "pointer":
+                pointer = param.children[0]
+            else:
+                raise ValueError(f"Unknown param type: {param.data}")
+        type = f[2]
+        if count != None:
+            type = type[count]
         
-        field = name / type
+        if pointer != None:
+            field = name / Pointer(pointer, type)
+        else:
+            field = name / type
         
         return field
     

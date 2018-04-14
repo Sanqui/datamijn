@@ -46,6 +46,11 @@ def test_array_hex():
     result = datamijn.parse(dm, b"\x01"*0xff)
     assert len(result.bytes) == 0xff
 
+def test_pointer():
+    db = "pointed_byte @10 u8"
+    result = datamijn.parse(db, b"\x00"*10 + b"\x01")
+    assert result.pointed_byte == 1
+
 def test_complex():
     result = datamijn.parse(open("test/test.dm"),
         open("test/test.bin", "rb"))
