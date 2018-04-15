@@ -1,3 +1,5 @@
+!import ascii
+
 coords {
     x       u8
     y       u8
@@ -25,35 +27,6 @@ letter          u8 enum {
     "d"             3
 }
 
-char            u8 enum {
-    "A"             0x41
-    "B"
-    "C"
-    "D"
-    "E"
-    "F"
-    "G"
-    "H"
-    "I"
-    "J"
-    "K"
-    "L"
-    "M"
-    "N"
-    "O"
-    "P"
-    "Q"
-    "R"
-    "S"
-    "T"
-    "U"
-    "V"
-    "W"
-    "X"
-    "Y"
-    "Z"
-    END         0x00
-}
 
 some_bits {
     bit_0        u1

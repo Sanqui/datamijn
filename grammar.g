@@ -22,9 +22,12 @@ ctx_name: NAME  -> ctx_value
 
 _NL: COMMENT? /(\r?\n[\t ]*)+/
 
-?start: _NL* field*
+?start: _NL* topstatement*
 
 ?name: NAME                -> name
+
+?topstatement: field
+    | "!import" NAME _NL+          -> import_
 
 field: name field_params type _NL+ -> field
 

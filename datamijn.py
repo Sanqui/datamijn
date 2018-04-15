@@ -1,4 +1,6 @@
 #!/usr/bin/python3
+import sys
+import os.path
 
 from lark import Lark, Transformer
 from lark.tree import Tree
@@ -27,8 +29,14 @@ class EnumElement():
         self.intvalue = intvalue
         self.value = value
     
+    def __repr__(self):
+        return f"EnumElement({self.intvalue}, {repr(self.value)})"
+    
     def __eq__(self, other):
-        return self.value == other
+        #if isinstance(other, EnumElement):
+        #    return self.intvalue == other.intvalue and self.value == other.value
+        #else:
+            return self.value == other
 
 # XXX killing writing here
 class TypedEnum(Enum):
@@ -77,9 +85,10 @@ class JoiningArray(Array):
         return obj
 
 class TreeToStruct(Transformer):
-    def __init__(self):
-        self.structs_by_name = {}
-        self.enum_last = 0
+    def __init__(self, structs_by_name, path):
+        self.structs_by_name = structs_by_name
+        self.path = path
+        self.enum_last = -1
         self.embed_counter = 0
     
     def eval(self, token):
@@ -90,6 +99,10 @@ class TreeToStruct(Transformer):
             return lambda this: this[ref]
         
         return ctx_value(token[0].value)
+    
+    def import_(self, token):
+        path = self.path + "/" + token[0] + ".dm"
+        self.structs_by_name.update(parse_definition(open(path))[1])
     
     def type(self, token):
         name = token[0]
@@ -113,7 +126,7 @@ class TreeToStruct(Transformer):
         return Char(token[0])
     
     def enum(self, tree):
-        self.enum_last = 0
+        self.enum_last = -1
         return dict(tree)
     
     def enum_field(self, tree):
@@ -170,7 +183,7 @@ class TreeToStruct(Transformer):
         
         return field
         
-grammar = open("grammar.g").read()
+grammar = open(sys.path[0]+"/grammar.g").read()
 
 def container_representer(dumper, data):
     del data['_io']
@@ -184,25 +197,33 @@ yaml.add_representer(ListContainer, list_container_representer)
 def enum_element_representer(dumper, data):
     return dumper.represent_data(str(data.value))
 yaml.add_representer(EnumElement, enum_element_representer)
-parser = Lark(grammar, parser='lalr', transformer=TreeToStruct())
+parser = Lark(grammar, parser='lalr')
 
-def parse(definition, data):
-    structs_by_name = {}
-    parser.options.transformer.structs_by_name = structs_by_name
+def parse_definition(definition):
+    path = ""
     if type(definition) != str:
+        path = os.path.dirname(definition.name)
         definition = definition.read()
     
     definition += "\n"
     
-    tree = parser.parse(definition)
+    structs_by_name = {}
+    transformer = TreeToStruct(structs_by_name, path)
+    tree = transformer.transform(parser.parse(definition))
 
     if type(tree) == Tree:
         structs = tree.children
     else:
         structs = [tree]
-
+    
     for struct in structs:
-        structs_by_name[struct.name] = struct
+        if struct:
+            structs_by_name[struct.name] = struct
+    
+    return structs, structs_by_name
+
+def parse(definition, data):
+    structs, structs_by_name = parse_definition(definition)
     
     start = None
     if "_start" in structs_by_name:

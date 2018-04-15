@@ -1,4 +1,5 @@
 import pytest
+import os
 
 import datamijn
 
@@ -164,6 +165,28 @@ test1       u8
     result = datamijn.parse(dm, b("0001"))
     assert result.test0 == 0
     assert result.test1 == 1
+
+def test_include(tmpdir):
+    tmpdir.join("color.dm").write("""
+color   u8 enum {
+    WHITE       0
+    RED         1
+    GREEN       2
+    BLUE        3
+}
+""")
+    tmpdir.join("test.dm").write("""
+!import color
+
+_start {
+    color1      color
+    color2      color
+}
+""")
+    
+    result = datamijn.parse(open(tmpdir.join("test.dm")), b("0201"))
+    assert result.color1 == result._structs.color.GREEN
+    assert result.color2 == result._structs.color.RED
 
 def test_complex():
     result = datamijn.parse(open("test/test.dm"),
