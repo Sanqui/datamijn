@@ -166,6 +166,18 @@ test1       u8
     assert result.test0 == 0
     assert result.test1 == 1
 
+def test_eval():
+    dm = """
+byte            u8
+one             = 1
+byte_plus_one   = byte + one
+"""
+    
+    result = datamijn.parse(dm, b("05"))
+    assert result.byte == 5
+    assert result.one == 1
+    assert result.byte_plus_one == 6
+
 def test_include(tmpdir):
     tmpdir.join("color.dm").write("""
 color   u8 enum {

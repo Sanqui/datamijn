@@ -9,15 +9,18 @@ SIGNED_INT: ["+"|"-"] INT
 NUM: INT | SIGNED_INT
 // TODO: expressions should allow for math
 EXPR: NUM
-STRING_DBL_INNER: ("\\\""|/[^"]/)
-STRING_DBL: "\"" STRING_DBL_INNER* "\""
-STRING_SNG_INNER: ("\\'"|/[^']/)
-STRING_SNG: "'" STRING_SNG_INNER* "'"
+//STRING_DBL_INNER: /("\\\"[^"]/ ("\\\""|/[^"]/)
+STRING_DBL: /"(\\\"|[^"])+"/
+//STRING_SNG_INNER: ("\\'"|/[^']/)
+STRING_SNG: /'(\\'|[^'])+'/
 COMMENT: /\/\/.*/
 ?string: STRING_DBL -> string
        | STRING_SNG -> string
 
 expr: EXPR -> eval
+// XXX
+ctx_expr: /=(.+)/  -> ctx_expr
+//ctx_expr: expr
 ctx_name: NAME  -> ctx_value
 
 _NL: COMMENT? /(\r?\n[\t ]*)+/
@@ -26,10 +29,11 @@ _NL: COMMENT? /(\r?\n[\t ]*)+/
 
 ?name: NAME                -> name
 
-?topstatement: field
-    | "!import" NAME _NL+          -> import_
+?topstatement: "!import" NAME _NL+          -> import_
+             | field
 
-field: name field_params type _NL+ -> field
+field: name ctx_expr _NL+           -> equ_field
+    | name field_params type _NL+ -> field
 
 ?type: NAME                -> type
     | "{" _NL+ field* "}"   -> typedef

@@ -1,3 +1,4 @@
+
 !import ascii
 
 coords {
@@ -47,6 +48,12 @@ empty {
     // comment
 }
 
+byte_plus_one {
+    byte            u8
+    one             = 1
+    byte_plus_one   = byte + one
+}
+
 _start       {
     version         u16
     positions       [0x2]coords
@@ -60,6 +67,8 @@ _start       {
     
     some_bits       @0x40 some_bits
     bit_array       @0x40 bit_array
+    
+    byte_plus_one   @0x40 byte_plus_one
 }
 
 

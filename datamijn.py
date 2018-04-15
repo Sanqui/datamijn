@@ -100,6 +100,11 @@ class TreeToStruct(Transformer):
         
         return ctx_value(token[0].value)
     
+    def ctx_expr(self, token):
+        expr = token[0][1:]
+        
+        return lambda ctx: eval(expr, ctx)
+    
     def import_(self, token):
         path = self.path + "/" + token[0] + ".dm"
         self.structs_by_name.update(parse_definition(open(path))[1])
@@ -182,6 +187,12 @@ class TreeToStruct(Transformer):
             field = name / type_
         
         return field
+    
+    def equ_field(self, f):
+        name = f[0].value
+        value = f[1]
+        
+        return name / Computed(value)
         
 grammar = open(sys.path[0]+"/grammar.g").read()
 
