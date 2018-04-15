@@ -87,6 +87,15 @@ test        u8 enum {
     result = datamijn.parse(db, b("02"))
     assert result.test == "two"
 
+def test_enum_string():
+    db = """
+test        u8 enum {
+    "a"         0
+    'b'         1
+}"""
+    result = datamijn.parse(db, b("01"))
+    assert result.test == "b"
+
 def test_complex():
     result = datamijn.parse(open("test/test.dm"),
         open("test/test.bin", "rb"))
@@ -94,7 +103,7 @@ def test_complex():
     # don't test the rest because
     # it changes often
 
-def test_reuse():
+def test_cleanup():
     dm = """
 a {
     byte    u8

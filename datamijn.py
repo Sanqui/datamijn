@@ -13,8 +13,8 @@ CONSTRUCT_ALIASES = {
 }
 
 class TreeToStruct(Transformer):
-    def __init__(self, structs_by_name):
-        self.structs_by_name = structs_by_name
+    def __init__(self):
+        self.structs_by_name = {}
     
     def eval(self, token):
         return eval(token[0])
@@ -32,11 +32,17 @@ class TreeToStruct(Transformer):
         else:
             return LazyBound(lambda: self.structs_by_name[name])
     
+    def string(self, token):
+        return token[0][1:-1]
+    
+    def name(self, token):
+        return token[0]
+    
     def enum(self, tree):
         return dict(tree)
     
     def enum_field(self, tree):
-        return (tree[0].value, tree[1])
+        return (tree[0], tree[1])
     
     def typedef(self, tree):
         return Struct(*tree)
@@ -87,15 +93,15 @@ def list_container_representer(dumper, data):
 yaml.add_representer(ListContainer, list_container_representer)
 # TODO improve
 def enum_integer_string_representer(dumper, data):
+    if type(data) == str:
+        return dumper.represent_data(data)
     return dumper.represent_data(str(data))
 yaml.add_representer(EnumIntegerString, enum_integer_string_representer)
+parser = Lark(grammar, parser='lalr', transformer=TreeToStruct())
 
 def parse(definition, data):
-    # XXX the parser should be done outside - but
-    # we need to pass structs_by_name as a part
-    # of a hack
     structs_by_name = {}
-    parser = Lark(grammar, parser='lalr', transformer=TreeToStruct(structs_by_name))
+    parser.options.transformer.structs_by_name = structs_by_name
     if type(definition) != str:
         definition = definition.read()
     

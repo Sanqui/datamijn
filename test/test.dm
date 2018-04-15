@@ -18,6 +18,13 @@ item_category   u8 enum {
     armor           3
 }
 
+letter          u8 enum {
+    "a"             0
+    "b"             1
+    "c"             2
+    "d"             3
+}
+
 _start       {
     version         u16
     positions       [0x2]coords
@@ -26,6 +33,7 @@ _start       {
     val_count       u8
     vals            @val_ptr [val_count]u8
     item_category   @0x20 item_category
+    letter          @0x21 letter
 }
 
 

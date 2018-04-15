@@ -26,8 +26,8 @@ In this `.dm` file, we describe a type, "coords", consisting of
 two bytes.  We then describe how to parse the binary from the
 beginning.
 
-Is `position` only used once?  No problem.  In datamijn, you can
-always define a type anonymously.
+Is `position` only used once?  No need to pollute your namespace.
+In datamijn, you can always define a type anonymously.
 
 ```
 version     u16
@@ -62,3 +62,8 @@ Acknowledgements
 Datamijn uses [Lark](https://github.com/erezsh/lark) to parse
 its DSL, while all the binary parsing duty falls on [Construct](https://github.com/construct/construct/).  So it doesn't actually do much.
 
+The project uses [Pipenv](https://github.com/pypa/pipenv) because
+it's 2018.
+
+I'm also currently using a fork of PyYAML with support for not
+sorting dict keys.
