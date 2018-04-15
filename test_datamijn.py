@@ -96,6 +96,22 @@ test        u8 enum {
     result = datamijn.parse(db, b("01"))
     assert result.test == "b"
 
+def test_enum_autoincrement():
+    db = """
+char        u8 enum {
+    "!"         0x21
+    "A"         0x41
+    "B"
+    "C"
+}
+
+_start {
+    string      [4]char
+}
+"""
+    result = datamijn.parse(db, b("43424121"))
+    assert result.string == ["C", "B", "A", "!"]
+
 def test_complex():
     result = datamijn.parse(open("test/test.dm"),
         open("test/test.bin", "rb"))

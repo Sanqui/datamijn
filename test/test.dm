@@ -25,6 +25,35 @@ letter          u8 enum {
     "d"             3
 }
 
+char            u8 enum {
+    "A"             0x41
+    "B"
+    "C"
+    "D"
+    "E"
+    "F"
+    "G"
+    "H"
+    "I"
+    "J"
+    "K"
+    "L"
+    "M"
+    "N"
+    "O"
+    "P"
+    "Q"
+    "R"
+    "S"
+    "T"
+    "U"
+    "V"
+    "W"
+    "X"
+    "Y"
+    "Z"
+}
+
 _start       {
     version         u16
     positions       [0x2]coords
@@ -34,6 +63,7 @@ _start       {
     vals            @val_ptr [val_count]u8
     item_category   @0x20 item_category
     letter          @0x21 letter
+    string          @0x30 [4]char
 }
 
 

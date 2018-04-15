@@ -31,8 +31,8 @@ field: name field_params type _NL -> field
     | "{" _NL field+ "}"   -> typedef
     | type enum            -> enum_type
 
-enum_field: name expr _NL  -> enum_field
-        | string expr _NL  -> enum_field
+enum_field: name expr? _NL  -> enum_field
+        | string expr? _NL  -> enum_field
 
 ?enum: "enum" "{" _NL enum_field+ "}"   -> enum
 

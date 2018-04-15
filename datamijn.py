@@ -15,6 +15,7 @@ CONSTRUCT_ALIASES = {
 class TreeToStruct(Transformer):
     def __init__(self):
         self.structs_by_name = {}
+        self.enum_last = 0
     
     def eval(self, token):
         return eval(token[0])
@@ -39,10 +40,16 @@ class TreeToStruct(Transformer):
         return token[0]
     
     def enum(self, tree):
+        self.enum_last = 0
         return dict(tree)
     
     def enum_field(self, tree):
-        return (tree[0], tree[1])
+        if len(tree) == 1:
+            val = self.enum_last + 1
+        else:
+            val = tree[1]
+        self.enum_last = val
+        return (tree[0], val)
     
     def typedef(self, tree):
         return Struct(*tree)
