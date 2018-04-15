@@ -12,6 +12,59 @@ CONSTRUCT_ALIASES = {
     "u32": Int32ul
 }
 
+class AttrDict(dict):
+    def __getattr__(self, attr):
+        return self[attr]
+
+class Token(str):
+    pass
+
+class Char(str):
+    pass
+
+class EnumElement():
+    def __init__(self, intvalue, value):
+        self.intvalue = intvalue
+        self.value = value
+    
+    def __eq__(self, other):
+        return self.value == other
+
+# XXX killing writing here
+class TypedEnum(Enum):
+    def __init__(self, subcon, mapping):
+        super(Enum, self).__init__(subcon)
+        #for enum in merge:
+        #    for enumentry in enum:
+        #        mapping[enumentry.name] = enumentry.value
+        #self.encmapping = {EnumElement(v,k):v for k,v in mapping.items()}
+        self.decmapping = {v:EnumElement(v,k) for k,v in mapping.items()}
+        self.ksymapping = {v:k for k,v in mapping.items()}
+
+class JoiningArray(Array):
+    def _parse(self, stream, context, path):
+        count = self.count
+        if callable(count):
+            count = count(context)
+        if not 0 <= count:
+            raise RangeError("invalid count %s" % (count,))
+        obj = ListContainer()
+        last_element = None
+        for i in range(count):
+            context._index = i
+            e = self.subcon._parsereport(stream, context, path)
+            if type(e) == EnumElement:
+                #print(type(e), e.value, e.intvalue)
+                e = e.value
+            if type(last_element) in (Char, str) and type(e) == Char:
+                last_element += e
+            else:
+                if last_element != None:
+                    obj.append(last_element)
+                last_element = e
+        obj.append(last_element)
+        return obj
+
 class TreeToStruct(Transformer):
     def __init__(self):
         self.structs_by_name = {}
@@ -34,10 +87,16 @@ class TreeToStruct(Transformer):
             return LazyBound(lambda: self.structs_by_name[name])
     
     def string(self, token):
-        return token[0][1:-1]
+        return Char(token[0][1:-1])
     
     def name(self, token):
         return token[0]
+    
+    def enum_name(self, token):
+        return Token(token[0])
+    
+    def enum_char(self, token):
+        return Char(token[0])
     
     def enum(self, tree):
         self.enum_last = 0
@@ -55,7 +114,7 @@ class TreeToStruct(Transformer):
         return Struct(*tree)
     
     def enum_type(self, tree):
-        return Enum(tree[0], **tree[1])
+        return TypedEnum(tree[0], tree[1])
     
     def field(self, f):
         name = f[0].value
@@ -71,7 +130,7 @@ class TreeToStruct(Transformer):
                 raise ValueError(f"Unknown param type: {param.data}")
         type_ = f[2]
         if count != None:
-            type_ = type_[count]
+            type_ = JoiningArray(count, type_)
         
         if pointer != None:
             field = name / Pointer(pointer, type_)
@@ -79,31 +138,21 @@ class TreeToStruct(Transformer):
             field = name / type_
         
         return field
-    
-    def field_array(self, f):
-        name = f[0].value
-        count = eval(f[1].value)
-        type = f[2]
-        
-        field = name / type[count]
-        
-        return field
         
 grammar = open("grammar.g").read()
 
 def container_representer(dumper, data):
     del data['_io']
+    del data['_structs']
     return dumper.represent_data(dict(data))
 yaml.add_representer(Container, container_representer)
 def list_container_representer(dumper, data):
     return dumper.represent_data(list(data))
 yaml.add_representer(ListContainer, list_container_representer)
 # TODO improve
-def enum_integer_string_representer(dumper, data):
-    if type(data) == str:
-        return dumper.represent_data(data)
-    return dumper.represent_data(str(data))
-yaml.add_representer(EnumIntegerString, enum_integer_string_representer)
+def enum_element_representer(dumper, data):
+    return dumper.represent_data(str(data.value))
+yaml.add_representer(EnumElement, enum_element_representer)
 parser = Lark(grammar, parser='lalr', transformer=TreeToStruct())
 
 def parse(definition, data):
@@ -134,6 +183,8 @@ def parse(definition, data):
         result = start.parse_stream(data)
     else:
         result = start.parse(data)
+    
+    result._structs = AttrDict(structs_by_name)
 
     return result
 

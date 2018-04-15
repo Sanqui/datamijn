@@ -23,16 +23,19 @@ _NL: /(\r?\n[\t ]*)+/
 
 ?start: _NL* field*
 
-field: name field_params type _NL -> field
-
 ?name: NAME                -> name
+
+field: name field_params type _NL -> field
 
 ?type: NAME                -> type
     | "{" _NL field+ "}"   -> typedef
     | type enum            -> enum_type
 
-enum_field: name expr? _NL  -> enum_field
-        | string expr? _NL  -> enum_field
+?enum_name: NAME                -> enum_name
+?enum_char: string              -> enum_char
+
+enum_field: enum_name expr? _NL  -> enum_field
+        | enum_char expr? _NL  -> enum_field
 
 ?enum: "enum" "{" _NL enum_field+ "}"   -> enum
 
