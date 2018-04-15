@@ -238,6 +238,17 @@ _start {
     result = datamijn.parse(dm, b"CABA\xff")
     assert result.string == ["CABA", result._structs.char.END2]
 
+def test_pos():
+    dm = """
+pos0        = _pos
+short       u16
+pos1        = _pos
+"""
+    result = datamijn.parse(dm, b("aaaa"))
+    assert result.pos0 == 0
+    assert result.short == 0xaaaa
+    assert result.pos1 == 2
+
 def test_include(tmpdir):
     tmpdir.join("color.dm").write("""
 color   u8 enum {

@@ -82,6 +82,8 @@ _start       {
     byte_plus_one   @0x40 byte_plus_one
     
     string_end      @0x50 [] char
+    
+    tell            = _pos
 }
 
 

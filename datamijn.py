@@ -135,6 +135,11 @@ class JoiningTerminatedArray(JoiningArray):
     def _sizeof(self, context, path):
         raise SizeofError("cannot calculate size, amount depends on actual data")
 
+class WithPositionInContext(Subconstruct):
+    def _parse(self, stream, context, path):
+        context['_pos'] = stream.tell()
+        return self.subcon._parsereport(stream, context, path)
+
 # Monkeypatch Construct
 container___eq___old = Container.__eq__
 def container___eq__(self, other):
@@ -179,7 +184,9 @@ class TreeToStruct(Transformer):
         return lambda ctx: eval(expr, ctx)
     
     def import_(self, token):
-        path = self.path + "/" + token[0] + ".dm"
+        path = token[0] + ".dm"
+        if self.path:
+            path = self.path + "/" + path
         self.structs_by_name.update(parse_definition(open(path))[1])
     
     def type(self, token):
@@ -266,13 +273,12 @@ class TreeToStruct(Transformer):
                     else:
                         t = type_.subcon
                     if hasattr(t, "_end"):
-                        print("has _end", t._end, type(t._end), obj, type(obj))
+                        #print("has _end", t._end, type(t._end), obj, type(obj))
                         include_last = True
                         if type(obj) == EnumElement and type(obj.value) == Token:
                             include_last = not obj.value.startswith("_")
                         end = t._end
                         if hasattr(end, "__iter__"):
-                            print("and is iterable")
                             if obj in end:
                                 return True, include_last
                         else:
@@ -294,7 +300,7 @@ class TreeToStruct(Transformer):
         name = f[0].value
         value = f[1]
         
-        return name / Computed(value)
+        return name / WithPositionInContext(Computed(value))
         
 grammar = open(sys.path[0]+"/grammar.g").read()
 
