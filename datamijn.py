@@ -80,6 +80,7 @@ class TreeToStruct(Transformer):
     def __init__(self):
         self.structs_by_name = {}
         self.enum_last = 0
+        self.embed_counter = 0
     
     def eval(self, token):
         return eval(token[0])
@@ -94,6 +95,8 @@ class TreeToStruct(Transformer):
         name = token[0]
         if name in CONSTRUCT_ALIASES:
             return CONSTRUCT_ALIASES[name]
+        elif name in "u1 u2 u3 u4 u5 u6 u7".split():
+            return BitsInteger(int(name[1]))
         else:
             return LazyBound(lambda: self.structs_by_name[name])
     
@@ -122,7 +125,22 @@ class TreeToStruct(Transformer):
         return (tree[0], val)
     
     def typedef(self, tree):
-        return Struct(*tree)
+        struct = []
+        bitstruct = []
+        for field in tree:
+            f = field
+            while hasattr(f, 'subcon'):
+                f = f.subcon
+            if isinstance(f, BitsInteger):
+                bitstruct.append(field)
+            else:
+                struct.append(field)
+        if struct and bitstruct:
+            raise ValueError("Cannot mix bit fields within struct")
+        if struct:
+            return Struct(*struct)
+        elif bitstruct:
+            return BitsSwapped(BitStruct(*bitstruct))
     
     def enum_type(self, tree):
         return TypedEnum(tree[0], tree[1])
@@ -206,5 +224,5 @@ if __name__ == "__main__":
     FILEF = argv[2]
     
     result = parse(open(STRUCTF), open(FILEF, "rb"))
-    #print(result._structs.char.END)
+    #print(result)
     print(yaml.dump(result, sort_keys=False))

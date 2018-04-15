@@ -125,6 +125,30 @@ _start {
     result = datamijn.parse(db, b("4342412100"))
     assert result.string == ["CBA!", result._structs.char.END]
 
+def test_bits():
+    dm = """
+some_bits {
+    a        u1
+    b        u1
+    two      [2]u1
+    rest     u4
+}
+
+_start {
+    bits            some_bits
+    following_byte  u8
+}"""
+    result = datamijn.parse(dm, b("07ff"))
+    print(result)
+    assert result.bits.a == 1
+    assert result.bits.b == 1
+    assert result.bits.two == [1, 0]
+    assert result.bits.rest == 0
+    assert result.following_byte == 0xff
+
+def test_bit_array():
+    pass
+
 def test_complex():
     result = datamijn.parse(open("test/test.dm"),
         open("test/test.bin", "rb"))
