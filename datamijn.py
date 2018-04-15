@@ -84,6 +84,23 @@ class JoiningArray(Array):
         obj.append(last_element)
         return obj
 
+# Monkeypatch Construct
+container___eq___old = Container.__eq__
+def container___eq__(self, other):
+    if "_val" in self:
+        return self._val == other
+    else:
+        return container___eq___old(self, other)
+Container.__eq__ = container___eq__
+
+container___str___old = Container.__str__
+def container___str__(self):
+    if "_val" in self:
+        return str(self._val)
+    else:
+        return container___str___old(self)
+Container.__str__ = container___str__
+
 class TreeToStruct(Transformer):
     def __init__(self, structs_by_name, path):
         self.structs_by_name = structs_by_name
@@ -199,7 +216,10 @@ grammar = open(sys.path[0]+"/grammar.g").read()
 def container_representer(dumper, data):
     del data['_io']
     del data['_structs']
-    return dumper.represent_data(dict(data))
+    if "_val" in data:
+        return dumper.represent_data(data._val)
+    else:
+        return dumper.represent_data(dict(data))
 yaml.add_representer(Container, container_representer)
 def list_container_representer(dumper, data):
     return dumper.represent_data(list(data))
@@ -258,5 +278,5 @@ if __name__ == "__main__":
     FILEF = argv[2]
     
     result = parse(open(STRUCTF), open(FILEF, "rb"))
-    #print(result)
-    print(yaml.dump(result, sort_keys=False))
+    print(result)
+    #print(yaml.dump(result, sort_keys=False))

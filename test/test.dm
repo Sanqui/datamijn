@@ -48,10 +48,16 @@ empty {
     // comment
 }
 
+//byte_plus_one {
+//    byte            u8
+//    one             = 1
+//    byte_plus_one   = byte + one
+//}
+
 byte_plus_one {
-    byte            u8
-    one             = 1
-    byte_plus_one   = byte + one
+    _byte            u8
+    _one             = 1
+    _val             = _byte + _one
 }
 
 _start       {

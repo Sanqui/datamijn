@@ -178,6 +178,24 @@ byte_plus_one   = byte + one
     assert result.one == 1
     assert result.byte_plus_one == 6
 
+def test_val():
+    dm = """
+negative_twice_byte {
+    _byte       u8
+    _val        = _byte * -2
+}
+
+_start {
+    a       negative_twice_byte
+}
+"""
+    
+    result = datamijn.parse(dm, b("05"))
+    assert result.a == -10
+    assert result.a._val == -10
+    assert result.a._byte == 5
+    assert str(result.a) == "-10"
+
 def test_include(tmpdir):
     tmpdir.join("color.dm").write("""
 color   u8 enum {
