@@ -42,8 +42,10 @@ field: name ctx_expr _NL+           -> equ_field
 ?enum_name: NAME                -> enum_name
 ?enum_char: string              -> enum_char
 
-enum_field: enum_name expr? _NL  -> enum_field
-        | enum_char expr? _NL  -> enum_field
+
+?enum_expr: ctx_expr
+enum_field: enum_name enum_expr? _NL  -> enum_field
+        | enum_char enum_expr? _NL    -> enum_field
 
 ?enum: "enum" "{" _NL enum_field+ "}"   -> enum
 
@@ -57,5 +59,6 @@ field_params:
 
 count: "[" expr "]"
        | "[" ctx_name "]"
+       | "[" "]"
 pointer: "@" expr    
        | "@" ctx_name

@@ -1,6 +1,6 @@
 
 char            u8 enum {
-    "A"             0x41
+    "A"           = 0x41
     "B"
     "C"
     "D"
@@ -26,6 +26,7 @@ char            u8 enum {
     "X"
     "Y"
     "Z"
-    END         0x00
+    END       = 0x00
+    _end      = END
 }
 

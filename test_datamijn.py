@@ -80,10 +80,10 @@ vals            @val_ptr [val_count] u8
 def test_enum():
     db = """
 test        u8 enum {
-    zero        0
-    one         1
-    two         2
-    three       3
+    zero       = 0
+    one        = 1
+    two        = 2
+    three      = 3
 }"""
     result = datamijn.parse(db, b("02"))
     assert result.test == "two"
@@ -91,8 +91,8 @@ test        u8 enum {
 def test_enum_string():
     db = """
 test        u8 enum {
-    "a"         0
-    'b'         1
+    "a"        = 0
+    'b'        = 1
 }"""
     result = datamijn.parse(db, b("01"))
     assert result.test == "b"
@@ -101,9 +101,9 @@ def test_enum_autoincrement():
     db = """
 num        u8 enum {
     zero
-    two_oh      0x20
+    two_oh     = 0x20
     two_one
-    four_oh     0x40
+    four_oh    = 0x40
 }
 """
     result = datamijn.parse(db, b("21"))
@@ -112,11 +112,11 @@ num        u8 enum {
 def test_enum_string():
     db = """
 char        u8 enum {
-    "!"         0x21
-    "A"         0x41
-    "B"         0x42
-    "C"         0x43
-    END         0x00
+    "!"        = 0x21
+    "A"        = 0x41
+    "B"        = 0x42
+    "C"        = 0x43
+    END        = 0x00
 }
 
 _start {
@@ -196,13 +196,55 @@ _start {
     assert result.a._byte == 5
     assert str(result.a) == "-10"
 
+def test_zero_terminated_array():
+    dm = """
+numbers         [] u8
+"""
+    result = datamijn.parse(dm, b("aabbcc00"))
+    assert result.numbers == [0xaa, 0xbb, 0xcc]
+
+def test_terminated_string():
+    dm = """
+char        u8 enum {
+    "A"     = 0x41
+    "B"
+    "C"
+    _END    = 0x00
+    _end    = _END
+}
+_start {
+    string      [] char
+}
+"""
+    result = datamijn.parse(dm, b"BACA\x00")
+    assert result.string == ["BACA"]
+
+def test_multiple_terminated_string():
+    dm = """
+char        u8 enum {
+    "A"     = 0x41
+    "B"
+    "C"
+    END1    = 0x00
+    END2    = 0xff
+    _end    = (END1, END2)
+}
+_start {
+    string      [] char
+}
+"""
+    result = datamijn.parse(dm, b"BACA\x00")
+    assert result.string == ["BACA", result._structs.char.END1]
+    result = datamijn.parse(dm, b"CABA\xff")
+    assert result.string == ["CABA", result._structs.char.END2]
+
 def test_include(tmpdir):
     tmpdir.join("color.dm").write("""
 color   u8 enum {
-    WHITE       0
-    RED         1
-    GREEN       2
-    BLUE        3
+    WHITE      = 0
+    RED        = 1
+    GREEN      = 2
+    BLUE       = 3
 }
 """)
     tmpdir.join("test.dm").write("""

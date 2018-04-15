@@ -19,15 +19,29 @@ class AttrDict(dict):
         return self[attr]
 
 class Token(str):
-    pass
-
-class Char(str):
-    pass
+    def __repr__(self):
+        return f"Token({self})"
 
 class EnumElement():
     def __init__(self, intvalue, value):
         self.intvalue = intvalue
         self.value = value
+    
+    def __add__(self, other):
+        if type(self.value) == str and type(other) == EnumElement and type(other.value) == str:
+            return self.value + other.value
+        elif type(self.value) == str and type(other) == str:
+            return self.value + other
+        else:
+            return NotImplemented
+    
+    def __radd__(self, other):
+        if type(self.value) == str and type(other) == EnumElement and type(other.value) == str:
+            return other.value + self.value
+        elif type(self.value) == str and type(other) == str:
+            return other + self.value
+        else:
+            return NotImplemented
     
     def __repr__(self):
         return f"EnumElement({self.intvalue}, {repr(self.value)})"
@@ -36,6 +50,9 @@ class EnumElement():
         #if isinstance(other, EnumElement):
         #    return self.intvalue == other.intvalue and self.value == other.value
         #else:
+        if isinstance(other, int):
+            return self.intvalue == other
+        else:
             return self.value == other
 
 # XXX killing writing here
@@ -45,44 +62,78 @@ class TypedEnum(Enum):
         #for enum in merge:
         #    for enumentry in enum:
         #        mapping[enumentry.name] = enumentry.value
-        self.charmapping = {k:v for k,v in mapping.items() if type(k)==Char}
-        self.tokenmapping = {k:v for k,v in mapping.items() if type(k)==Token}
-        self.decmapping = {v:EnumElement(v,k) for k,v in mapping.items()}
-        self.ksymapping = {v:k for k,v in mapping.items()}
+        self.charmapping = {k:EnumElement(v,k) for k,v in mapping.items() if type(k)==str}
+        self.tokenmapping = {k:EnumElement(v,k) for k,v in mapping.items() if type(k)==Token and not k == "_end"}
+        self.decmapping = {v:EnumElement(v,k) for k,v in mapping.items() if type(k)==str}
+        self.decmapping.update({v:EnumElement(v,k) for k,v in mapping.items() if type(k)==Token and not k == "_end"})
+        #self.ksymapping = {v:k for k,v in mapping.items()}
+        
+        if "_end" in mapping:
+            self._end = mapping['_end']
+        else:
+            self._end = None
     
     def __getattr__(self, name):
         if name in self.tokenmapping:
-            return self.decmapping[self.tokenmapping[name]]
+            return self.tokenmapping[name].value
         raise AttributeError
     
     def __getitem__(self, name):
         if name in self.charmapping:
-            return self.decmapping[self.charmapping[name]]
+            return self.charmapping[name].value
         raise KeyError
 
 class JoiningArray(Array):
+    def __init__(self, count, subcon, discard=False):
+        super(Array, self).__init__(subcon)
+        self.count = count
+        self.discard = discard
+        self.predicate = None
+        
     def _parse(self, stream, context, path):
         count = self.count
-        if callable(count):
-            count = count(context)
-        if not 0 <= count:
-            raise RangeError("invalid count %s" % (count,))
+        predicate = self.predicate
+        if count != None:
+            if callable(count):
+                count = count(context)
+            if not 0 <= count:
+                raise RangeError("invalid count %s" % (count,))
         obj = ListContainer()
         last_element = None
-        for i in range(count):
+        include_last = True
+        i = 0
+        while True:
             context._index = i
             e = self.subcon._parsereport(stream, context, path)
-            if type(e) == EnumElement:
-                #print(type(e), e.value, e.intvalue)
-                e = e.value
-            if type(last_element) in (Char, str) and type(e) == Char:
-                last_element += e
-            else:
+            # XXX this should be elsewhere ?
+            try:
+                if type(last_element) == EnumElement or type(e) == EnumElement:
+                    last_element += e
+                else:
+                    raise TypeError
+            except TypeError:
                 if last_element != None:
                     obj.append(last_element)
                 last_element = e
-        obj.append(last_element)
+            i += 1
+            if i == count: break
+            if predicate != None:
+                end, include_last = predicate(last_element, obj, path)
+                if end:
+                    break
+        if include_last:
+            obj.append(last_element)
         return obj
+        
+class JoiningTerminatedArray(JoiningArray):
+    def __init__(self, predicate, subcon, discard=False):
+        super(Array, self).__init__(subcon)
+        self.predicate = predicate
+        self.discard = discard
+        self.count = None
+
+    def _sizeof(self, context, path):
+        raise SizeofError("cannot calculate size, amount depends on actual data")
 
 # Monkeypatch Construct
 container___eq___old = Container.__eq__
@@ -106,7 +157,12 @@ class TreeToStruct(Transformer):
         self.structs_by_name = structs_by_name
         self.path = path
         self.enum_last = -1
+        # XXX yes this is sadly an in-memory dupe
+        self._enum = {}
         self.embed_counter = 0
+    
+    def none(self, token):
+        return None
     
     def eval(self, token):
         return eval(token[0])
@@ -136,7 +192,7 @@ class TreeToStruct(Transformer):
             return LazyBound(lambda: self.structs_by_name[name])
     
     def string(self, token):
-        return Char(token[0][1:-1])
+        return token[0][1:-1]
     
     def name(self, token):
         return token[0]
@@ -145,9 +201,10 @@ class TreeToStruct(Transformer):
         return Token(token[0])
     
     def enum_char(self, token):
-        return Char(token[0])
+        return token[0]
     
     def enum(self, tree):
+        self._enum = {}
         self.enum_last = -1
         return dict(tree)
     
@@ -155,7 +212,8 @@ class TreeToStruct(Transformer):
         if len(tree) == 1:
             val = self.enum_last + 1
         else:
-            val = tree[1]
+            val = tree[1](self._enum)
+        self._enum[tree[0]] = val
         self.enum_last = val
         return (tree[0], val)
     
@@ -185,18 +243,45 @@ class TreeToStruct(Transformer):
     def field(self, f):
         name = f[0].value
         params = f[1]
+        array = False
         count = None
         pointer = None
         for param in params.children:
             if param.data == "count":
-                count = param.children[0]
+                array = True
+                if param.children:
+                    count = param.children[0]
             elif param.data == "pointer":
                 pointer = param.children[0]
             else:
                 raise ValueError(f"Unknown param type: {param.data}")
         type_ = f[2]
-        if count != None:
-            type_ = JoiningArray(count, type_)
+        if array:
+            if count:
+                type_ = JoiningArray(count, type_)
+            else:
+                def predicate(obj, lst, ctx):
+                    if hasattr(type_.subcon, 'subconfunc'):
+                        t = type_.subcon.subconfunc()
+                    else:
+                        t = type_.subcon
+                    if hasattr(t, "_end"):
+                        print("has _end", t._end, type(t._end), obj, type(obj))
+                        include_last = True
+                        if type(obj) == EnumElement and type(obj.value) == Token:
+                            include_last = not obj.value.startswith("_")
+                        end = t._end
+                        if hasattr(end, "__iter__"):
+                            print("and is iterable")
+                            if obj in end:
+                                return True, include_last
+                        else:
+                            if obj == end:
+                                return True, include_last
+                    elif not obj:
+                        return True, False
+                    return False, False
+                type_ = JoiningTerminatedArray(predicate, type_)
         
         if pointer != None:
             field = name / Pointer(pointer, type_)
@@ -278,5 +363,5 @@ if __name__ == "__main__":
     FILEF = argv[2]
     
     result = parse(open(STRUCTF), open(FILEF, "rb"))
-    print(result)
-    #print(yaml.dump(result, sort_keys=False))
+    #print(result)
+    print(yaml.dump(result, sort_keys=False))

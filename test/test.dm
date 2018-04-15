@@ -15,18 +15,23 @@ val_ptr {
 }
 
 item_category   u8 enum {
-    none            0
-    potion          1
-    weapon          2
-    armor           3
+    none           = 0
+    potion         = 1
+    weapon         = 2
+    armor          = 3
 }
 
 letter          u8 enum {
-    "a"             0
-    "b"             1
-    "c"             2
-    "d"             3
+    "a"             = 0
+    "b"             = 1
+    "c"             = 2
+    "d"             = 3
+    END             = 0xfe
+    END2            = 0xff
+    _end           = (END, END2)
 }
+
+terminated_string [] letter
 
 
 some_bits {
@@ -75,6 +80,8 @@ _start       {
     bit_array       @0x40 bit_array
     
     byte_plus_one   @0x40 byte_plus_one
+    
+    string_end      @0x50 [] char
 }
 
 
