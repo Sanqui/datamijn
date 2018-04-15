@@ -136,11 +136,13 @@ class TreeToStruct(Transformer):
             else:
                 struct.append(field)
         if struct and bitstruct:
-            raise ValueError("Cannot mix bit fields within struct")
+            raise ValueError("Cannot mix bit and byte fields within struct")
         if struct:
             return Struct(*struct)
         elif bitstruct:
             return BitsSwapped(BitStruct(*bitstruct))
+        else:
+            return Struct()
     
     def enum_type(self, tree):
         return TypedEnum(tree[0], tree[1])

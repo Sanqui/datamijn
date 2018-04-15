@@ -146,8 +146,24 @@ _start {
     assert result.bits.rest == 0
     assert result.following_byte == 0xff
 
-def test_bit_array():
-    pass
+def test_empty():
+    dm = """
+empty {
+
+}"""
+    result = datamijn.parse(dm, b(""))
+    assert result.empty
+
+def test_comment():
+    dm = """
+// initial comment
+test0       u8 // comment after line
+test1       u8
+// comment at the end
+"""
+    result = datamijn.parse(dm, b("0001"))
+    assert result.test0 == 0
+    assert result.test1 == 1
 
 def test_complex():
     result = datamijn.parse(open("test/test.dm"),

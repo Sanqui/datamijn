@@ -70,6 +70,10 @@ bit_array {
     bits        [8]u1
 }
 
+empty {
+    // comment
+}
+
 _start       {
     version         u16
     positions       [0x2]coords

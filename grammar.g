@@ -13,22 +13,23 @@ STRING_DBL_INNER: ("\\\""|/[^"]/)
 STRING_DBL: "\"" STRING_DBL_INNER* "\""
 STRING_SNG_INNER: ("\\'"|/[^']/)
 STRING_SNG: "'" STRING_SNG_INNER* "'"
+COMMENT: /\/\/.*/
 ?string: STRING_DBL -> string
        | STRING_SNG -> string
 
 expr: EXPR -> eval
 ctx_name: NAME  -> ctx_value
 
-_NL: /(\r?\n[\t ]*)+/
+_NL: COMMENT? /(\r?\n[\t ]*)+/
 
 ?start: _NL* field*
 
 ?name: NAME                -> name
 
-field: name field_params type _NL -> field
+field: name field_params type _NL+ -> field
 
 ?type: NAME                -> type
-    | "{" _NL field+ "}"   -> typedef
+    | "{" _NL+ field* "}"   -> typedef
     | type enum            -> enum_type
 
 ?enum_name: NAME                -> enum_name
