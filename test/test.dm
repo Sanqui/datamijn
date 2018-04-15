@@ -52,6 +52,7 @@ char            u8 enum {
     "X"
     "Y"
     "Z"
+    END         0x00
 }
 
 _start       {

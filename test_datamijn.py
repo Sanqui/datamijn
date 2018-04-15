@@ -123,7 +123,7 @@ _start {
 }
 """
     result = datamijn.parse(db, b("4342412100"))
-    assert result.string == ["CBA!", "END"]
+    assert result.string == ["CBA!", result._structs.char.END]
 
 def test_complex():
     result = datamijn.parse(open("test/test.dm"),

@@ -37,9 +37,20 @@ class TypedEnum(Enum):
         #for enum in merge:
         #    for enumentry in enum:
         #        mapping[enumentry.name] = enumentry.value
-        #self.encmapping = {EnumElement(v,k):v for k,v in mapping.items()}
+        self.charmapping = {k:v for k,v in mapping.items() if type(k)==Char}
+        self.tokenmapping = {k:v for k,v in mapping.items() if type(k)==Token}
         self.decmapping = {v:EnumElement(v,k) for k,v in mapping.items()}
         self.ksymapping = {v:k for k,v in mapping.items()}
+    
+    def __getattr__(self, name):
+        if name in self.tokenmapping:
+            return self.decmapping[self.tokenmapping[name]]
+        raise AttributeError
+    
+    def __getitem__(self, name):
+        if name in self.charmapping:
+            return self.decmapping[self.charmapping[name]]
+        raise KeyError
 
 class JoiningArray(Array):
     def _parse(self, stream, context, path):
@@ -195,4 +206,5 @@ if __name__ == "__main__":
     FILEF = argv[2]
     
     result = parse(open(STRUCTF), open(FILEF, "rb"))
+    #print(result._structs.char.END)
     print(yaml.dump(result, sort_keys=False))
