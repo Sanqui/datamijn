@@ -276,6 +276,35 @@ _start {
     assert result.fruit == "BANANA"
     assert result.fruit == 2
 
+def test_index():
+    dm = """
+dummy_array  [4] {
+    index       = _index
+}
+"""
+    result = datamijn.parse(dm, b"")
+    for i in range(4):
+        assert result.dummy_array[i].index == i
+
+def test_nested_index():
+    dm = """
+dummy_array  [4] {
+    x               {
+        index = _index
+    }
+}
+"""
+    result = datamijn.parse(dm, b"")
+    for i in range(4):
+        assert result.dummy_array[i].x.index == i
+
+def test_type_name_error():
+    dm = "something     noexist"
+    
+    with pytest.raises(NameError):
+        result = datamijn.parse(dm, b"")
+    
+
 def test_include(tmpdir):
     tmpdir.join("color.dm").write("""
 color   u8 enum {
@@ -313,7 +342,7 @@ a {
 _start a"""
     result = datamijn.parse(dm, b"\x00")
     
-    with pytest.raises(KeyError):
+    with pytest.raises(NameError):
         dm2 = "_start a"
         result = datamijn.parse(dm2, b"\x00")
         

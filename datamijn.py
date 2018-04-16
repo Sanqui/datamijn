@@ -139,6 +139,13 @@ class JoiningTerminatedArray(JoiningArray):
 class WithPositionInContext(Subconstruct):
     def _parse(self, stream, context, path):
         context['_pos'] = stream.tell()
+        # propagate _index
+        c = context
+        while '_index' not in c and hasattr(c, '_'):
+            c = c_
+        if '_index' in c:
+            context['_index'] = c['_index']
+        
         return self.subcon._parsereport(stream, context, path)
 
 # Monkeypatch Construct
@@ -211,7 +218,12 @@ class TreeToStruct(Transformer):
         elif name in "u1 u2 u3 u4 u5 u6 u7".split():
             return BitsInteger(int(name[1]))
         else:
-            return LazyBound(lambda: self.structs_by_name[name])
+            name = str(name)
+            def func_type():
+                if name not in self.structs_by_name:
+                    raise NameError(f"Type {name} not defined in this context")
+                return self.structs_by_name[name]
+            return LazyBound(func_type)
     
     def typedef(self, tree):
         struct = []

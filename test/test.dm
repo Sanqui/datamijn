@@ -1,4 +1,3 @@
-
 !import ascii
 
 coords {
@@ -99,6 +98,7 @@ _start       {
     }
     
     fruit           = FRUIT.APPLE
+    
 }
 
 
