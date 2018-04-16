@@ -65,6 +65,12 @@ byte_plus_one {
     _val             = _byte + _one
 }
 
+FRUIT u8 enum {
+    APPLE
+    PEAR
+    BANANA
+}
+
 _start       {
     version         u16
     positions       [0x2]coords
@@ -86,6 +92,13 @@ _start       {
     unknown_item_category @0x57 item_category
     
     tell            = _pos
+    
+    test_value      = 10
+    test_access     {
+        test            = _root.test_value
+    }
+    
+    fruit           = FRUIT.APPLE
 }
 
 

@@ -18,6 +18,7 @@ class AttrDict(dict):
     def __getattr__(self, attr):
         return self[attr]
 
+# TODO replace this with actual enums somehow?
 class Token(str):
     def __repr__(self):
         return f"Token({self})"
@@ -75,12 +76,12 @@ class TypedEnum(Enum):
     
     def __getattr__(self, name):
         if name in self.tokenmapping:
-            return self.tokenmapping[name].value
+            return self.tokenmapping[name]
         raise AttributeError
     
     def __getitem__(self, name):
         if name in self.charmapping:
-            return self.charmapping[name].value
+            return self.charmapping[name]
         raise KeyError
 
 class JoiningArray(Array):
@@ -175,7 +176,7 @@ class TreeToStruct(Transformer):
     def ctx_expr(self, token):
         expr = token[0][1:]
         
-        return lambda ctx: eval(expr, ctx)
+        return lambda ctx: eval(expr, {**self.structs_by_name, **ctx})
     
     def ctx_name(self, token):
         def ctx_name(ref):

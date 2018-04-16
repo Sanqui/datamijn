@@ -87,6 +87,7 @@ test        u8 enum {
 }"""
     result = datamijn.parse(db, b("02"))
     assert result.test == "two"
+    assert result.test == 2
 
 def test_enum_missing():
     db = """
@@ -257,6 +258,23 @@ pos1        = _pos
     assert result.pos0 == 0
     assert result.short == 0xaaaa
     assert result.pos1 == 2
+
+def test_eval_enum_access():
+    dm = """
+FRUIT u8 enum {
+    APPLE
+    PEAR
+    BANANA
+}
+
+_start {
+    fruit       = FRUIT.BANANA
+}"""
+    result = datamijn.parse(dm, b"")
+    # TODO should enums be accessible ad result.FRUIT.BANANA?
+    assert result.fruit == result._structs.FRUIT.BANANA
+    assert result.fruit == "BANANA"
+    assert result.fruit == 2
 
 def test_include(tmpdir):
     tmpdir.join("color.dm").write("""
