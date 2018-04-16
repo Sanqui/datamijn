@@ -187,7 +187,8 @@ class TreeToStruct(Transformer):
         path = token[0] + ".dm"
         if self.path:
             path = self.path + "/" + path
-        self.structs_by_name.update(parse_definition(open(path))[1])
+        
+        return parse_definition(open(path))
     
     def type(self, token):
         name = token[0]
@@ -301,6 +302,16 @@ class TreeToStruct(Transformer):
         value = f[1]
         
         return name / WithPositionInContext(Computed(value))
+    
+    def start(self, structs):
+        for struct in structs:
+            if struct.name == None:
+                structs += struct.subcons
+                
+        self.structs_by_name = {s.name: s for s in structs}
+        
+        result = Struct(*structs)
+        return result
         
 grammar = open(sys.path[0]+"/grammar.g").read()
 
@@ -331,35 +342,23 @@ def parse_definition(definition):
     
     structs_by_name = {}
     transformer = TreeToStruct(structs_by_name, path)
-    tree = transformer.transform(parser.parse(definition))
-
-    if type(tree) == Tree:
-        structs = tree.children
-    else:
-        structs = [tree]
+    struct = transformer.transform(parser.parse(definition))
     
-    for struct in structs:
-        if struct:
-            structs_by_name[struct.name] = struct
-    
-    return structs, structs_by_name
+    return struct
 
 def parse(definition, data):
-    structs, structs_by_name = parse_definition(definition)
-    
-    start = None
-    if "_start" in structs_by_name:
-        start = structs_by_name["_start"]
+    struct = parse_definition(definition)
+    if hasattr(struct, "_start"):
+        start = struct._start
     else:
-        start = Struct(*structs)
+        start = struct
     
     if type(data) != bytes:
         result = start.parse_stream(data)
     else:
         result = start.parse(data)
-    
-    result._structs = AttrDict(structs_by_name)
 
+    result._structs = struct
     return result
 
 if __name__ == "__main__":

@@ -25,7 +25,7 @@ ctx_name: NAME  -> ctx_value
 
 _NL: COMMENT? /(\r?\n[\t ]*)+/
 
-?start: _NL* topstatement*
+?start: _NL* topstatement*      -> start
 
 ?name: NAME                -> name
 

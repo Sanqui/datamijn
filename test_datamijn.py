@@ -225,16 +225,16 @@ char        u8 enum {
     "A"     = 0x41
     "B"
     "C"
-    END1    = 0x00
+    _END1    = 0x00
     END2    = 0xff
-    _end    = (END1, END2)
+    _end    = (_END1, END2)
 }
 _start {
     string      [] char
 }
 """
     result = datamijn.parse(dm, b"BACA\x00")
-    assert result.string == ["BACA", result._structs.char.END1]
+    assert result.string == ["BACA"]
     result = datamijn.parse(dm, b"CABA\xff")
     assert result.string == ["CABA", result._structs.char.END2]
 
