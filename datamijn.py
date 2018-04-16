@@ -321,6 +321,9 @@ def list_container_representer(dumper, data):
     return dumper.represent_data(list(data))
 yaml.add_representer(ListContainer, list_container_representer)
 # TODO improve
+def enum_integer_representer(dumper, data):
+    return dumper.represent_data(int(data))
+yaml.add_representer(EnumInteger, enum_integer_representer)
 def enum_element_representer(dumper, data):
     return dumper.represent_data(str(data.value))
 yaml.add_representer(EnumElement, enum_element_representer)

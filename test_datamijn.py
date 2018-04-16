@@ -88,6 +88,15 @@ test        u8 enum {
     result = datamijn.parse(db, b("02"))
     assert result.test == "two"
 
+def test_enum_missing():
+    db = """
+test       [2] u8 enum {
+    zero       = 0
+    one        = 1
+}"""
+    result = datamijn.parse(db, b("0105"))
+    assert result.test == ["one", 5]
+
 def test_enum_string():
     db = """
 test        u8 enum {

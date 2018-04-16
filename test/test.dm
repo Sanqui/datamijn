@@ -83,6 +83,8 @@ _start       {
     
     string_end      @0x50 [] char
     
+    unknown_item_category @0x57 item_category
+    
     tell            = _pos
 }
 
