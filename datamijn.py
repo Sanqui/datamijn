@@ -166,29 +166,42 @@ class TreeToStruct(Transformer):
         self._enum = {}
         self.embed_counter = 0
     
-    def none(self, token):
-        return None
+    def string(self, token):
+        return token[0][1:-1]
     
     def eval(self, token):
         return eval(token[0])
-    
-    def ctx_value(self, token):
-        def ctx_value(ref):
-            return lambda this: this[ref]
-        
-        return ctx_value(token[0].value)
     
     def ctx_expr(self, token):
         expr = token[0][1:]
         
         return lambda ctx: eval(expr, ctx)
     
-    def import_(self, token):
-        path = token[0] + ".dm"
-        if self.path:
-            path = self.path + "/" + path
+    def ctx_name(self, token):
+        def ctx_name(ref):
+            return lambda this: this[ref]
         
-        return parse_definition(open(path))
+        return ctx_name(token[0].value)
+    
+    def enum_token(self, token):
+        return Token(token[0])
+    
+    def enum_str(self, token):
+        return token[0]
+        
+    def enum_field(self, tree):
+        if len(tree) == 1:
+            val = self.enum_last + 1
+        else:
+            val = tree[1](self._enum)
+        self._enum[tree[0]] = val
+        self.enum_last = val
+        return (tree[0], val)
+    
+    def enum(self, tree):
+        self._enum = {}
+        self.enum_last = -1
+        return dict(tree)
     
     def type(self, token):
         name = token[0]
@@ -198,32 +211,6 @@ class TreeToStruct(Transformer):
             return BitsInteger(int(name[1]))
         else:
             return LazyBound(lambda: self.structs_by_name[name])
-    
-    def string(self, token):
-        return token[0][1:-1]
-    
-    def name(self, token):
-        return token[0]
-    
-    def enum_name(self, token):
-        return Token(token[0])
-    
-    def enum_char(self, token):
-        return token[0]
-    
-    def enum(self, tree):
-        self._enum = {}
-        self.enum_last = -1
-        return dict(tree)
-    
-    def enum_field(self, tree):
-        if len(tree) == 1:
-            val = self.enum_last + 1
-        else:
-            val = tree[1](self._enum)
-        self._enum[tree[0]] = val
-        self.enum_last = val
-        return (tree[0], val)
     
     def typedef(self, tree):
         struct = []
@@ -245,8 +232,14 @@ class TreeToStruct(Transformer):
         else:
             return Struct()
     
-    def enum_type(self, tree):
+    def type_enum(self, tree):
         return TypedEnum(tree[0], tree[1])
+    
+    def equ_field(self, f):
+        name = f[0].value
+        value = f[1]
+        
+        return name / WithPositionInContext(Computed(value))
     
     def field(self, f):
         name = f[0].value
@@ -297,11 +290,12 @@ class TreeToStruct(Transformer):
         
         return field
     
-    def equ_field(self, f):
-        name = f[0].value
-        value = f[1]
+    def import_(self, token):
+        path = token[0] + ".dm"
+        if self.path:
+            path = self.path + "/" + path
         
-        return name / WithPositionInContext(Computed(value))
+        return parse_definition(open(path))
     
     def start(self, structs):
         for struct in structs:

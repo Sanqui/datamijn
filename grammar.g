@@ -7,49 +7,38 @@ HEXDIGIT: "a".."f"|"A".."F"|DIGIT
 INT: "0x" HEXDIGIT+|DIGIT+
 SIGNED_INT: ["+"|"-"] INT
 NUM: INT | SIGNED_INT
-// TODO: expressions should allow for math
+// TODO: expressions should allow for some math
+// but for now we have ctx_expr which is farpowerful
 EXPR: NUM
-//STRING_DBL_INNER: /("\\\"[^"]/ ("\\\""|/[^"]/)
+
 STRING_DBL: /"(\\\"|[^"])+"/
-//STRING_SNG_INNER: ("\\'"|/[^']/)
 STRING_SNG: /'(\\'|[^'])+'/
-COMMENT: /\/\/.*/
-?string: STRING_DBL -> string
-       | STRING_SNG -> string
+
+string: STRING_DBL -> string
+      | STRING_SNG -> string
 
 expr: EXPR -> eval
-// XXX
-ctx_expr: /=(.+)/  -> ctx_expr
-//ctx_expr: expr
-ctx_name: NAME  -> ctx_value
 
-_NL: COMMENT? /(\r?\n[\t ]*)+/
+ctx_expr: /=(.+)/          -> ctx_expr
 
-?start: _NL* topstatement*      -> start
+ctx_name: NAME             -> ctx_name
 
-?name: NAME                -> name
+enum_key: NAME             -> enum_token
+        | string           -> enum_str
 
-?topstatement: "!import" NAME _NL+          -> import_
-             | field
+enum_field: enum_key ctx_expr? _NL  -> enum_field
 
-field: name ctx_expr _NL+           -> equ_field
-    | name field_params type _NL+ -> field
+enum: "enum" "{" _NL enum_field+ "}"   -> enum
 
-?type: NAME                -> type
+type: NAME                  -> type
     | "{" _NL+ field* "}"   -> typedef
-    | type enum            -> enum_type
+    | type enum             -> type_enum
 
-?enum_name: NAME                -> enum_name
-?enum_char: string              -> enum_char
-
-
-?enum_expr: ctx_expr
-enum_field: enum_name enum_expr? _NL  -> enum_field
-        | enum_char enum_expr? _NL    -> enum_field
-
-?enum: "enum" "{" _NL enum_field+ "}"   -> enum
-
-// XXX does count pointer make sense?
+count: "[" expr "]"
+     | "[" ctx_name "]"
+     | "[" "]"
+pointer: "@" expr    
+       | "@" ctx_name
 
 field_params:
     | count
@@ -57,8 +46,14 @@ field_params:
     | count pointer
     | pointer count
 
-count: "[" expr "]"
-       | "[" ctx_name "]"
-       | "[" "]"
-pointer: "@" expr    
-       | "@" ctx_name
+field: NAME ctx_expr _NL+           -> equ_field
+     | NAME field_params type _NL+  -> field
+
+COMMENT: /\/\/.*/
+_NL: COMMENT? /(\r?\n[\t ]*)+/
+
+?topstatement: "!import" NAME _NL+  -> import_
+             | field
+
+start: _NL* topstatement*           -> start
+
