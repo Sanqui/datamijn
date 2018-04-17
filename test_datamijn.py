@@ -311,6 +311,18 @@ def test_if():
     assert result.true == 1
     assert result.false == None
 
+def test_if_else():
+    dm = """
+!if 1 {
+    true = 1
+}!else {
+    false = 1
+}
+"""
+    result = datamijn.parse(dm, b"")
+    assert result.true == 1
+    assert result.false == None
+
 def test_type_name_error():
     dm = "something     noexist"
     

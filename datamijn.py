@@ -279,6 +279,11 @@ class TreeToStruct(Transformer):
         for field in f[1].subcons:
             name = field.name
             fields.append(name / If(self._eval_ctx(ifname), field))
+        if len(f) == 3:
+            assert type(f[2]) == Struct
+            for field in f[2].subcons:
+                name = field.name
+                fields.append(name / If(self._eval_ctx("not "+ifname), field))
         self.ifcounter += 1
         print(fields)
         return fields

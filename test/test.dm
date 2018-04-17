@@ -110,6 +110,8 @@ _start       {
     
     !if 0 {
         this_shouldnt_be_true = 1
+    } !else {
+        knew_it_all_along = 1
     }
 }
 
