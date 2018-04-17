@@ -99,6 +99,18 @@ _start       {
     
     fruit           = FRUIT.APPLE
     
+    !if 1 {
+        conditional = 1
+        another = 2
+    }
+    
+    !if version == 291 {
+        version_was_291 = 1
+    }
+    
+    !if 0 {
+        this_shouldnt_be_true = 1
+    }
 }
 
 

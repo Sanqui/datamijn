@@ -298,6 +298,19 @@ dummy_array  [4] {
     for i in range(4):
         assert result.dummy_array[i].x.index == i
 
+def test_if():
+    dm = """
+!if 1 {
+    true = 1
+}
+!if 0 {
+    false = 1
+}
+"""
+    result = datamijn.parse(dm, b"")
+    assert result.true == 1
+    assert result.false == None
+
 def test_type_name_error():
     dm = "something     noexist"
     

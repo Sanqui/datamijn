@@ -172,7 +172,10 @@ class TreeToStruct(Transformer):
         self.enum_last = -1
         # XXX yes this is sadly an in-memory dupe
         self._enum = {}
-        self.embed_counter = 0
+        self.ifcounter = 0
+    
+    def _eval_ctx(self, expr):
+        return lambda ctx: eval(expr, {**self.structs_by_name, **ctx})
     
     def string(self, token):
         return token[0][1:-1]
@@ -183,7 +186,9 @@ class TreeToStruct(Transformer):
     def ctx_expr(self, token):
         expr = token[0][1:]
         
-        return lambda ctx: eval(expr, {**self.structs_by_name, **ctx})
+        return self._eval_ctx(expr)
+    
+    #def 
     
     def ctx_name(self, token):
         def ctx_name(ref):
@@ -213,7 +218,9 @@ class TreeToStruct(Transformer):
     
     def type(self, token):
         name = token[0]
-        if name in CONSTRUCT_ALIASES:
+        if isinstance(name, Construct):
+            return name
+        elif name in CONSTRUCT_ALIASES:
             return CONSTRUCT_ALIASES[name]
         elif name in "u1 u2 u3 u4 u5 u6 u7".split():
             return BitsInteger(int(name[1]))
@@ -228,7 +235,15 @@ class TreeToStruct(Transformer):
     def typedef(self, tree):
         struct = []
         bitstruct = []
+        
+        flat_tree = []
         for field in tree:
+            if isinstance(field, list):
+                flat_tree += field
+            else:
+                flat_tree.append(field)
+        
+        for field in flat_tree:
             f = field
             while hasattr(f, 'subcon'):
                 f = f.subcon
@@ -253,6 +268,20 @@ class TreeToStruct(Transformer):
         value = f[1]
         
         return name / WithPositionInContext(Computed(value))
+    
+    def if_field(self, f):
+        cond = self._eval_ctx(f[0][4:])
+        # simulate an embedded if
+        fields = []
+        ifname = f"__if_{self.ifcounter}"
+        fields.append(ifname / WithPositionInContext(Computed(cond)))
+        assert type(f[1]) == Struct
+        for field in f[1].subcons:
+            name = field.name
+            fields.append(name / If(self._eval_ctx(ifname), field))
+        self.ifcounter += 1
+        print(fields)
+        return fields
     
     def field(self, f):
         name = f[0].value
@@ -311,24 +340,28 @@ class TreeToStruct(Transformer):
         return parse_definition(open(path))
     
     def start(self, structs):
+        flat_structs = []
         for struct in structs:
-            if struct.name == None:
-                structs += struct.subcons
+            if type(struct) == list:
+                flat_structs += struct
+            elif struct.name == None:
+                flat_structs += struct.subcons
+            else:
+                flat_structs.append(struct)
                 
-        self.structs_by_name = {s.name: s for s in structs}
+        self.structs_by_name = {s.name: s for s in flat_structs}
         
-        result = Struct(*structs)
+        result = Struct(*flat_structs)
         return result
         
 grammar = open(sys.path[0]+"/grammar.g").read()
 
 def container_representer(dumper, data):
-    del data['_io']
-    del data['_structs']
     if "_val" in data:
         return dumper.represent_data(data._val)
     else:
-        return dumper.represent_data(dict(data))
+        data = dict({k:v for k,v in data.items() if not k.startswith("_")})
+        return dumper.represent_data(data)
 yaml.add_representer(Container, container_representer)
 def list_container_representer(dumper, data):
     return dumper.represent_data(list(data))
