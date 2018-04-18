@@ -139,6 +139,7 @@ class JoiningTerminatedArray(JoiningArray):
 class WithPositionInContext(Subconstruct):
     def _parse(self, stream, context, path):
         context['_pos'] = stream.tell()
+        context['_path'] = path
         # propagate _index
         c = context
         while '_index' not in c and hasattr(c, '_'):
@@ -195,7 +196,13 @@ class TreeToStruct(Transformer):
         self.ifcounter = 0
     
     def _eval_ctx(self, expr):
-        return lambda ctx: eval(expr, {**self.structs_by_name, **ctx})
+        def _eval_ctx_func(ctx):
+            try:
+                result = eval(expr, {**self.structs_by_name, **ctx})
+            except Exception as ex:
+                raise type(ex)(f"{ex}\nPath: {ctx._path}")
+            return result
+        return _eval_ctx_func
     
     def string(self, token):
         return token[0][1:-1]

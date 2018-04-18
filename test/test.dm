@@ -135,7 +135,10 @@ _start       {
         }
         at_ptr_val  @derp u8
         size_val    @0 [derp] u8
+        
+        //error = missingno
     }
+    
 }
 
 
