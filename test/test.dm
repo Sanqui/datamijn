@@ -129,6 +129,12 @@ _start       {
             a = 0
             y = 0
         }
+        
+        derp        {
+            _val        = 1
+        }
+        at_ptr_val  @derp u8
+        size_val    @0 [derp] u8
     }
 }
 

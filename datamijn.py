@@ -165,6 +165,26 @@ def container___str__(self):
         return container___str___old(self)
 Container.__str__ = container___str__
 
+def perform_on__val(method_name):
+    def method(self, other):
+        if "_val" in self:
+            return getattr(self._val, method_name)(other)
+    return method
+
+for method_name in "lt le eq ne gt ge int".split():
+    method_name = f"__{method_name}__"
+    #setattr(Container, method_name, perform_on__val(method_name))
+
+def whack__val_from(obj):
+    if hasattr(obj, "_val"):
+        while hasattr(obj, "_val") and obj._val != None:
+            obj = obj._val
+        return obj
+    elif callable(obj):
+        return lambda *args, **kvargs: whack__val_from(obj(*args, **kvargs))
+    else:
+        return obj
+
 class TreeToStruct(Transformer):
     def __init__(self, structs_by_name, path):
         self.structs_by_name = structs_by_name
@@ -331,9 +351,9 @@ class TreeToStruct(Transformer):
             if param.data == "count":
                 array = True
                 if param.children:
-                    count = param.children[0]
+                    count = whack__val_from(param.children[0])
             elif param.data == "pointer":
-                pointer = self._eval_ctx(param.children[0][1:])
+                pointer = whack__val_from(self._eval_ctx(param.children[0][1:]))
             else:
                 raise ValueError(f"Unknown param type: {param.data}")
         type_ = f[2]

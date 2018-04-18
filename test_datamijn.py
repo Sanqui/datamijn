@@ -51,6 +51,18 @@ def test_array_hex():
     result = datamijn.parse(dm, b('01')*0xff)
     assert len(result.bytes) == 0xff
 
+def test_array__val():
+    dm = """
+test    {
+    _val    = 2
+}
+
+bytes    [test] u8
+"""
+    result = datamijn.parse(dm, b("aabb"))
+    assert result.test == 2
+    assert result.bytes == [0xaa, 0xbb]
+
 @pytest.mark.parametrize("test_hex", [True, False])
 def test_pointer(test_hex):
     ptr = "0x0a" if test_hex else "10"
@@ -87,6 +99,18 @@ vals            @val_ptr [val_count] u8
     data = b('1000' + '03' + '00'*13 + 'aabbcc')
     result = datamijn.parse(db, data)
     assert result.vals == [0xaa, 0xbb, 0xcc]
+
+def test_pointer__val():
+    dm = """
+test    {
+    _val    = 1
+}
+
+byte    @test u8
+"""
+    result = datamijn.parse(dm, b("00aa"))
+    assert result.test == 1
+    assert result.byte == 0xaa
 
 def test_enum():
     db = """
