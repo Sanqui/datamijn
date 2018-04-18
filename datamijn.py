@@ -285,8 +285,12 @@ class TreeToStruct(Transformer):
                 name = field.name
                 fields.append(name / If(self._eval_ctx("not "+ifname), field))
         self.ifcounter += 1
-        print(fields)
         return fields
+    
+    def assert_field(self, f):
+        cond = self._eval_ctx(f[0][8:])
+        
+        return Check(cond)
     
     def field(self, f):
         name = f[0].value

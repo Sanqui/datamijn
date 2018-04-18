@@ -323,6 +323,15 @@ def test_if_else():
     assert result.true == 1
     assert result.false == None
 
+def test_assert():
+    dm = """
+byte        u8
+assert byte == 5
+"""
+    result = datamijn.parse(dm, b"05")
+    assert result.byte == 5
+    
+
 def test_type_name_error():
     dm = "something     noexist"
     

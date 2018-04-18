@@ -113,6 +113,8 @@ _start       {
     } !else {
         knew_it_all_along = 1
     }
+    
+    !assert version == 291
 }
 
 
