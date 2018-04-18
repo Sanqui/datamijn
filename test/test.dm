@@ -137,6 +137,11 @@ _start       {
         size_val    @0 [derp] u8
         
         //error = missingno
+        
+        end_on_end [] {
+            i       = _index
+            _stop   = i == 5
+        }
     }
     
 }

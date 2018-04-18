@@ -369,6 +369,10 @@ class TreeToStruct(Transformer):
                 type_ = JoiningArray(count, type_)
             else:
                 def predicate(obj, lst, ctx):
+                    # XXX should this be _end instead?
+                    if hasattr(obj, "_stop"):
+                        if obj._stop:
+                            return True, True
                     if hasattr(type_.subcon, 'subconfunc'):
                         t = type_.subcon.subconfunc()
                     else:

@@ -248,6 +248,20 @@ numbers         [] u8
     result = datamijn.parse(dm, b("aabbcc00"))
     assert result.numbers == [0xaa, 0xbb, 0xcc]
 
+def test__stop_terminated_array():
+    dm = """
+numbers         [] {
+    number      u8
+    _stop       = number == 0xff
+}
+"""
+    result = datamijn.parse(dm, b("000102ff"))
+    assert result.numbers[0].number == 0
+    assert result.numbers[1].number == 1
+    assert result.numbers[2].number == 2
+    assert result.numbers[3].number == 0xff
+    assert len(result.numbers) == 4
+
 def test_terminated_string():
     dm = """
 char        u8 enum {
