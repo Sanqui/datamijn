@@ -304,7 +304,7 @@ class TreeToStruct(Transformer):
                 if param.children:
                     count = param.children[0]
             elif param.data == "pointer":
-                pointer = param.children[0]
+                pointer = self._eval_ctx(param.children[0][1:])
             else:
                 raise ValueError(f"Unknown param type: {param.data}")
         type_ = f[2]
@@ -353,7 +353,7 @@ class TreeToStruct(Transformer):
         for struct in structs:
             if type(struct) == list:
                 flat_structs += struct
-            elif struct.name == None:
+            elif struct.name == None and hasattr(struct, "subcons"):
                 flat_structs += struct.subcons
             else:
                 flat_structs.append(struct)

@@ -115,6 +115,10 @@ _start       {
     }
     
     !assert version == 291
+    
+    testcomplex     = [0, 1, 2]
+    xxxx_ptr    @_root.testcomplex[0] u16
+    //xxxx_arr    [_root.testcomplex[1]] u16
 }
 
 

@@ -67,6 +67,17 @@ val     @val_ptr u8
     result = datamijn.parse(db, data)
     assert result.val == 0xaa
 
+def test_dynamic_pointer_complex():
+    db = """
+val_ptr [1]u8
+val     @_root.val_ptr[0] u8
+"""
+    data = b('0102')
+    result = datamijn.parse(db, data)
+    assert result.val_ptr == [1]
+    assert result.val == 2
+    
+
 def test_dynamic_pointer_array():
     db = """
 val_ptr         u16
@@ -326,9 +337,9 @@ def test_if_else():
 def test_assert():
     dm = """
 byte        u8
-assert byte == 5
+!assert byte == 5
 """
-    result = datamijn.parse(dm, b"05")
+    result = datamijn.parse(dm, b("05"))
     assert result.byte == 5
     
 

@@ -39,8 +39,9 @@ type: NAME                   -> type
 count: "[" expr "]"
      | "[" ctx_name "]"
      | "[" "]"
-pointer: "@" expr    
-       | "@" ctx_name
+pointer: /@[^ ]*/
+// "@" expr    
+//       | "@" ctx_name
 
 field_params:
     | count
@@ -51,7 +52,7 @@ field_params:
 field: NAME ctx_expr _NL+           -> equ_field
      | NAME field_params type _NL+  -> field
      | /\!if ([^\{]+)/ typedef ("!else" typedef)? _NL+ -> if_field
-     | /\!assert (.*)/ _NL+         -> assert_field
+     | /\!assert(.*)/ _NL+         -> assert_field
 
 COMMENT: /\/\/.*/
 _NL: COMMENT? /(\r?\n[\t ]*)+/
