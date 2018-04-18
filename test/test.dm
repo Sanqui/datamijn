@@ -119,6 +119,17 @@ _start       {
     testcomplex     = [0, 1, 2]
     xxxx_ptr    @_root.testcomplex[0] u16
     //xxxx_arr    [_root.testcomplex[1]] u16
+    
+    new {
+        !if 1 {
+            a = 1
+            b = 1
+        } !else {
+            x = 0
+            a = 0
+            y = 0
+        }
+    }
 }
 
 

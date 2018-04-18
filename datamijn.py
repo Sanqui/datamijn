@@ -275,6 +275,35 @@ class TreeToStruct(Transformer):
         fields = []
         ifname = f"__if_{self.ifcounter}"
         fields.append(ifname / WithPositionInContext(Computed(cond)))
+        fields1 = f[1].subcons
+        fields0 = f[2].subcons if len(f) == 3 else []
+        
+        passed_0 = []
+        while fields1:
+            f1 = fields1.pop(0)
+            name = f1.name
+            matched = False
+            if name in passed_0:
+                raise Exception(f"Error: Crossing field {name} in conditional block.  This is unsupported in current implementation.")
+            for f0 in fields0:
+                if f0.name == name:
+                    matched = True
+            if matched:
+                f0 = None
+                while True:
+                    f0 = fields0.pop(0)
+                    if f0.name != name:
+                        fields.append(f0.name / If(self._eval_ctx("not "+ifname), f0))
+                        passed_0.append(f0.name)
+                    else:
+                        fields.append(name / IfThenElse(self._eval_ctx(ifname), f1, f0))
+                        break
+            else:
+                fields.append(name / If(self._eval_ctx(ifname), f1))
+        for f0 in fields0:
+            name = f0.name
+            fields.append(name / If(self._eval_ctx("not "+ifname), f0))
+        
         assert type(f[1]) == Struct
         for field in f[1].subcons:
             name = field.name

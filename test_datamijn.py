@@ -334,6 +334,44 @@ def test_if_else():
     assert result.true == 1
     assert result.false == None
 
+def test_if_else_overlap():
+    dm = """
+!if 1 {
+    a = 1
+    b = 1
+    c = 1
+}!else {
+    x = 0
+    a = 0
+    y = 0
+    c = 0
+    z = 0
+}
+"""
+    result = datamijn.parse(dm, b"")
+    assert result.a == 1
+    assert result.b == 1
+    assert result.c == 1
+    assert result.x == None
+    assert result.y == None
+    assert result.z == None
+
+@pytest.mark.xfail
+def test_if_else_cross():
+    dm = """
+!if 0 {
+    x = 1
+    y = 1
+}!else {
+    y = 0
+    x = 0
+}
+"""
+    result = datamijn.parse(dm, b"")
+    print(result)
+    assert result.x == 0
+    assert result.y == 0
+
 def test_assert():
     dm = """
 byte        u8
