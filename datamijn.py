@@ -107,19 +107,24 @@ class JoiningArray(Array):
             context._index = i
             e = self.subcon._parsereport(stream, context, path)
             # XXX this should be elsewhere ?
-            try:
-                if type(last_element) == EnumElement or type(e) == EnumElement:
-                    last_element += e
-                else:
-                    raise TypeError
-            except TypeError:
-                if last_element != None:
-                    obj.append(last_element)
-                last_element = e
+            if hasattr(e, "_add"):
+                include_last = False
+                if e._add != None:
+                    obj += e._add
+            else:
+                try:
+                    if type(last_element) == EnumElement or type(e) == EnumElement:
+                        last_element += e
+                    else:
+                        raise TypeError
+                except TypeError:
+                    if last_element != None:
+                        obj.append(last_element)
+                    last_element = e
             i += 1
             if i == count: break
             if predicate != None:
-                end, include_last = predicate(last_element, obj, path)
+                end, include_last = predicate(e, obj, path)
                 if end:
                     break
         if include_last:

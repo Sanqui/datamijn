@@ -142,6 +142,11 @@ _start       {
             i       = _index
             _stop   = i == 5
         }
+        
+        
+        added_list [5] {
+            _add    = [_index]
+        }
     }
     
 }

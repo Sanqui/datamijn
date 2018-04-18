@@ -262,6 +262,18 @@ numbers         [] {
     assert result.numbers[3].number == 0xff
     assert len(result.numbers) == 4
 
+
+def test__add_array():
+    dm = """
+rle         [2] {
+    count      u8
+    value      u8
+    _add       = [value] * count
+}
+"""
+    result = datamijn.parse(dm, b("02000501"))
+    assert result.rle == [0, 0, 1, 1, 1, 1, 1]
+
 def test_terminated_string():
     dm = """
 char        u8 enum {
