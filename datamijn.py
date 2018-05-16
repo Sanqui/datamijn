@@ -105,6 +105,7 @@ class JoiningArray(Array):
         i = 0
         while True:
             context._index = i
+            context._arr = obj
             e = self.subcon._parsereport(stream, context, path)
             # XXX this should be elsewhere ?
             if hasattr(e, "_add"):
@@ -146,11 +147,13 @@ class WithPositionInContext(Subconstruct):
         context['_pos'] = stream.tell()
         context['_path'] = path
         # propagate _index
-        c = context
-        while '_index' not in c and hasattr(c, '_'):
-            c = c_
-        if '_index' in c:
-            context['_index'] = c['_index']
+        propagate = "_index _arr".split()
+        for p in propagate:
+            c = context
+            while p not in c and hasattr(c, '_'):
+                c = c._
+            if p in c:
+                context[p] = c[p]
         
         return self.subcon._parsereport(stream, context, path)
 
@@ -353,6 +356,44 @@ class TreeToStruct(Transformer):
         
         return Check(cond)
     
+    def type_count(self, f):
+        count_tree, type_ = f
+        if count_tree.children:
+            count = whack__val_from(count_tree.children[0])
+        else:
+            count = None
+            
+        if count:
+            type_ = JoiningArray(count, type_)
+        else:
+            def predicate(obj, lst, ctx):
+                # XXX should this be _end instead?
+                if hasattr(obj, "_stop"):
+                    if obj._stop:
+                        return True, True
+                if hasattr(type_.subcon, 'subconfunc'):
+                    t = type_.subcon.subconfunc()
+                else:
+                    t = type_.subcon
+                if hasattr(t, "_end"):
+                    #print("has _end", t._end, type(t._end), obj, type(obj))
+                    include_last = True
+                    if type(obj) == EnumElement and type(obj.value) == Token:
+                        include_last = not obj.value.startswith("_")
+                    end = t._end
+                    if hasattr(end, "__iter__"):
+                        if obj in end:
+                            return True, include_last
+                    else:
+                        if obj == end:
+                            return True, include_last
+                elif not obj:
+                    return True, False
+                return False, False
+            type_ = JoiningTerminatedArray(predicate, type_)
+        
+        return type_
+    
     def field(self, f):
         name = f[0].value
         params = f[1]
@@ -369,35 +410,6 @@ class TreeToStruct(Transformer):
             else:
                 raise ValueError(f"Unknown param type: {param.data}")
         type_ = f[2]
-        if array:
-            if count:
-                type_ = JoiningArray(count, type_)
-            else:
-                def predicate(obj, lst, ctx):
-                    # XXX should this be _end instead?
-                    if hasattr(obj, "_stop"):
-                        if obj._stop:
-                            return True, True
-                    if hasattr(type_.subcon, 'subconfunc'):
-                        t = type_.subcon.subconfunc()
-                    else:
-                        t = type_.subcon
-                    if hasattr(t, "_end"):
-                        #print("has _end", t._end, type(t._end), obj, type(obj))
-                        include_last = True
-                        if type(obj) == EnumElement and type(obj.value) == Token:
-                            include_last = not obj.value.startswith("_")
-                        end = t._end
-                        if hasattr(end, "__iter__"):
-                            if obj in end:
-                                return True, include_last
-                        else:
-                            if obj == end:
-                                return True, include_last
-                    elif not obj:
-                        return True, False
-                    return False, False
-                type_ = JoiningTerminatedArray(predicate, type_)
         
         if pointer != None:
             field = name / Pointer(pointer, type_)

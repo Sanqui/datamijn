@@ -33,6 +33,25 @@ def test_array():
     result = datamijn.parse(dm, b('010203040506'))
     assert result.bytes == [1,2,3,4,5,6]
 
+def test_nested_array():
+    dm = """bytes   [2][2][2]u8"""
+    
+    result = datamijn.parse(dm, b('0102030405060708'))
+    assert result.bytes == [1,2,3,4,5,6]
+
+def test_array_inline_typedef():
+    dm = """
+bytes   [2]{
+    a   u8
+    b   u8
+}"""
+    
+    result = datamijn.parse(dm, b('01020304'))
+    assert result.bytes[0].a == 1
+    assert result.bytes[0].b == 2
+    assert result.bytes[1].a == 3
+    assert result.bytes[1].b == 4
+
 def test_array_inline_typedef():
     dm = """
 bytes   [2]{

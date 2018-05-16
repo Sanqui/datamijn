@@ -32,22 +32,21 @@ enum: "enum" "{" _NL enum_field+ "}"   -> enum
 
 typedef: "{" _NL+ field* "}" -> typedef
 
-type: NAME                   -> type
-    | typedef
-    | type enum              -> type_enum
-
 count: "[" expr "]"
      | "[" ctx_name "]"
      | "[" "]"
+
+type: NAME                   -> type
+    | typedef
+    | count type             -> type_count
+    | type enum              -> type_enum
+
 pointer: /@[^ ]*/
 // "@" expr    
 //       | "@" ctx_name
 
 field_params:
-    | count
     | pointer
-    | count pointer
-    | pointer count
 
 field: NAME ctx_expr _NL+           -> equ_field
      | NAME field_params type _NL+  -> field
