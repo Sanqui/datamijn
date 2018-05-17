@@ -283,6 +283,7 @@ class TreeToStruct(Transformer):
             while hasattr(f, 'subcon'):
                 f = f.subcon
             if isinstance(f, BitsInteger):
+                print(field)
                 bitstruct.append(field)
             else:
                 struct.append(field)

@@ -37,7 +37,10 @@ def test_nested_array():
     dm = """bytes   [2][2][2]u8"""
     
     result = datamijn.parse(dm, b('0102030405060708'))
-    assert result.bytes == [1,2,3,4,5,6]
+    assert result.bytes[0][0] == [1, 2]
+    assert result.bytes[0][1] == [3, 4]
+    assert result.bytes[1][0] == [5, 6]
+    assert result.bytes[1][1] == [7, 8]
 
 def test_array_inline_typedef():
     dm = """
@@ -210,6 +213,17 @@ _start {
     assert result.bits.two == [1, 0]
     assert result.bits.rest == 0
     assert result.following_byte == 0xff
+
+@pytest.mark.xfail
+def test_bit_type():
+    dm = """
+bits   [8]u1
+_start {
+    bits bits
+}
+"""
+    result = datamijn.parse(dm, b("aa"))
+    assert result == [1, 0, 1, 0, 1, 0, 1, 0]
 
 def test_empty():
     dm = """

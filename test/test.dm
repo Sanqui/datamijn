@@ -70,15 +70,15 @@ FRUIT u8 enum {
     BANANA
 }
 
-//tilerow     [8]u1
-//tileplane   [8]u1
+tilerow     [8]u1
+tileplane   [8]tilerow
 
-//tile {
-//    _NUM_PLANES = 2
-//    _planes     [_NUM_PLANES]tileplane
-//    x        = _planes
-//    //y        = [b0 | b1 << 1 for b0, b1 in _planes]
-//}
+tile {
+    _NUM_PLANES = 2
+    _planes     [_NUM_PLANES]tileplane
+    planes        = _planes
+    //y        = [b0 | b1 << 1 for b0, b1 in _planes]
+}
 
 _start       {
     version         u16
@@ -164,8 +164,9 @@ _start       {
         }
     }
     
-    //tile    @0x100  tile
     double_array    @0 [2][2]u8
+    
+    tile    @0x100  tile
 }
 
 
