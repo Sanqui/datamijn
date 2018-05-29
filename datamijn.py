@@ -6,7 +6,9 @@ from lark import Lark, Transformer
 from lark.tree import Tree
 from construct import *
 from construct.lib.containers import Container
+from construct.core import StreamError
 import yaml
+import png
 
 CONSTRUCT_ALIASES = {
     "u8": Int8ul,
@@ -103,6 +105,9 @@ class JoiningArray(Array):
         last_element = None
         include_last = True
         i = 0
+        if count == 0:
+            # TODO test count 0
+            return obj
         while True:
             context._index = i
             context._arr = obj
@@ -142,8 +147,39 @@ class JoiningTerminatedArray(JoiningArray):
     def _sizeof(self, context, path):
         raise SizeofError("cannot calculate size, amount depends on actual data")
 
+def to_lines(image, width):
+    """
+    Convert a tiled quaternary pixel map to lines of quaternary pixels.
+    
+    From pret/gfx.py
+    """
+    tile_width = 8
+    tile_height = 8
+    num_columns = width // tile_width
+    height = len(image) // width
+
+    lines = []
+    for cur_line in range(height):
+        tile_row = cur_line // tile_height
+        line = []
+        for column in range(num_columns):
+            anchor = (
+                num_columns * tile_row * tile_width * tile_height +
+                column * tile_width * tile_height +
+                cur_line % tile_height * tile_width
+            )
+            line += image[anchor : anchor + tile_width]
+        lines += [line]
+    return lines
+
+
+def func_gfx(tiles, palette):
+    w = png.writer()
+    
+
 class WithPositionInContext(Subconstruct):
     def _parse(self, stream, context, path):
+        context['_gfx'] = func_gfx
         context['_pos'] = stream.tell()
         context['_path'] = path
         # propagate _index
@@ -270,6 +306,8 @@ class TreeToStruct(Transformer):
     def typedef(self, tree):
         struct = []
         bitstruct = []
+        has_bit = False
+        has_byte = False
         
         flat_tree = []
         for field in tree:
@@ -283,16 +321,20 @@ class TreeToStruct(Transformer):
             while hasattr(f, 'subcon'):
                 f = f.subcon
             if isinstance(f, BitsInteger):
-                print(field)
+                has_bit = True
                 bitstruct.append(field)
-            else:
+            elif isinstance(f, Computed):
+                bitstruct.append(field)
                 struct.append(field)
-        if struct and bitstruct:
+            else:
+                has_byte = True
+                struct.append(field)
+        if has_bit and has_byte:
             raise ValueError("Cannot mix bit and byte fields within struct")
-        if struct:
-            return Struct(*struct)
-        elif bitstruct:
+        if has_bit:
             return BitsSwapped(BitStruct(*bitstruct))
+        elif has_byte or struct:
+            return Struct(*struct)
         else:
             return Struct()
     
@@ -402,11 +444,7 @@ class TreeToStruct(Transformer):
         count = None
         pointer = None
         for param in params.children:
-            if param.data == "count":
-                array = True
-                if param.children:
-                    count = whack__val_from(param.children[0])
-            elif param.data == "pointer":
+            if param.data == "pointer":
                 pointer = whack__val_from(self._eval_ctx(param.children[0][1:]))
             else:
                 raise ValueError(f"Unknown param type: {param.data}")

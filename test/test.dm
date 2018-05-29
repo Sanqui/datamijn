@@ -70,14 +70,13 @@ FRUIT u8 enum {
     BANANA
 }
 
-tilerow     [8]u1
-tileplane   [8]tilerow
+//tilerow     [8]u1
+//tileplane   [8]tilerow
 
 tile {
     _NUM_PLANES = 2
-    _planes     [_NUM_PLANES]tileplane
-    planes        = _planes
-    //y        = [b0 | b1 << 1 for b0, b1 in _planes]
+    _planes     [_NUM_PLANES][8][8]u1
+    _val        = [[b0 | b1<<1 for b0, b1 in zip(_planes[0][row][::-1], _planes[1][row][::-1])] for row in range(8)]
 }
 
 _start       {
@@ -166,7 +165,9 @@ _start       {
     
     double_array    @0 [2][2]u8
     
-    tile    @0x100  tile
+    tiles       @0x100  [2]tile
+    palette     = [(255,)*3, (2/3*255,)*3, (1/3*255,)*3, (0,)*3]
+    gfx         = gfx(tiles, palette)
 }
 
 
