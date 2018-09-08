@@ -7,7 +7,7 @@ from lark.tree import Tree
 from construct import *
 from construct.lib.containers import Container
 from construct.core import StreamError
-import yaml
+import oyaml as yaml
 import png
 
 CONSTRUCT_ALIASES = {
@@ -537,4 +537,4 @@ if __name__ == "__main__":
     
     result = parse(open(STRUCTF), open(FILEF, "rb"))
     #print(result)
-    print(yaml.dump(result, sort_keys=False))
+    print(yaml.dump(result))
