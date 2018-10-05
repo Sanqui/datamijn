@@ -167,7 +167,7 @@ _start       {
     
     tiles       @0x100  [2]tile
     palette     = [(255,)*3, (2/3*255,)*3, (1/3*255,)*3, (0,)*3]
-    gfx         = gfx(tiles, palette)
+    //gfx         = gfx(tiles, palette)
 }
 
 

@@ -1,234 +1,115 @@
 #!/usr/bin/python3
 import sys
 import os.path
+from io import BytesIO
 
 from lark import Lark, Transformer
 from lark.tree import Tree
-from construct import *
-from construct.lib.containers import Container
-from construct.core import StreamError
 import oyaml as yaml
 import png
 
-CONSTRUCT_ALIASES = {
-    "u8": Int8ul,
-    "u16": Int16ul,
-    "u32": Int32ul
-}
-
-class AttrDict(dict):
-    def __getattr__(self, attr):
-        return self[attr]
-
-# TODO replace this with actual enums somehow?
 class Token(str):
     def __repr__(self):
         return f"Token({self})"
 
-class EnumElement():
-    def __init__(self, intvalue, value):
-        self.intvalue = intvalue
+class Data():
+    def __init__(self, data, address, length):
+        self.data = data
+        self.address = address
+        self.length = length
+
+class Primitive():
+    def __init__(self, value=None, data=None):
         self.value = value
+        self.data = data
     
-    def __add__(self, other):
-        if type(self.value) == str and type(other) == EnumElement and type(other.value) == str:
-            return self.value + other.value
-        elif type(self.value) == str and type(other) == str:
-            return self.value + other
-        else:
-            return NotImplemented
+    @classmethod
+    def parse_stream(self, stream):
+        raise NotImplementedError()
     
-    def __radd__(self, other):
-        if type(self.value) == str and type(other) == EnumElement and type(other.value) == str:
-            return other.value + self.value
-        elif type(self.value) == str and type(other) == str:
-            return other + self.value
-        else:
-            return NotImplemented
+    @classmethod
+    def write(self, stream):
+        raise NotImplementedError()
+        
+    @classmethod
+    def resolve(self, ctx):
+        return
+    
+    def python_value(self):
+        return self.value
     
     def __repr__(self):
-        return f"EnumElement({self.intvalue}, {repr(self.value)})"
-    
-    def __eq__(self, other):
-        #if isinstance(other, EnumElement):
-        #    return self.intvalue == other.intvalue and self.value == other.value
-        #else:
-        if isinstance(other, int):
-            return self.intvalue == other
-        else:
-            return self.value == other
+        print(f"Primitive({repr(self.name)})")
 
-# XXX killing writing here
-class TypedEnum(Enum):
-    def __init__(self, subcon, mapping):
-        super(Enum, self).__init__(subcon)
-        #for enum in merge:
-        #    for enumentry in enum:
-        #        mapping[enumentry.name] = enumentry.value
-        self.charmapping = {k:EnumElement(v,k) for k,v in mapping.items() if type(k)==str}
-        self.tokenmapping = {k:EnumElement(v,k) for k,v in mapping.items() if type(k)==Token and not k == "_end"}
-        self.decmapping = {v:EnumElement(v,k) for k,v in mapping.items() if type(k)==str}
-        self.decmapping.update({v:EnumElement(v,k) for k,v in mapping.items() if type(k)==Token and not k == "_end"})
-        #self.ksymapping = {v:k for k,v in mapping.items()}
+class U8(Primitive):
+    @classmethod
+    def parse_stream(self, stream):
+        address = stream.tell()
+        length = 1
+        data = stream.read(1)
+        data = Data(data=data, address=address, length=length)
         
-        if "_end" in mapping:
-            self._end = mapping['_end']
-        else:
-            self._end = None
-    
-    def __getattr__(self, name):
-        if name in self.tokenmapping:
-            return self.tokenmapping[name]
-        raise AttributeError
-    
-    def __getitem__(self, name):
-        if name in self.charmapping:
-            return self.charmapping[name]
-        raise KeyError
+        value = ord(data.data)
+        return self(value=value, data=data)
 
-class JoiningArray(Array):
-    def __init__(self, count, subcon, discard=False):
-        super(Array, self).__init__(subcon)
-        self.count = count
-        self.discard = discard
-        self.predicate = None
+class U16(Primitive):
+    @classmethod
+    def parse_stream(self, stream):
+        address = stream.tell()
+        length = 2
+        data = stream.read(2)
+        data = Data(data=data, address=address, length=length)
         
-    def _parse(self, stream, context, path):
-        count = self.count
-        predicate = self.predicate
-        if count != None:
-            if callable(count):
-                count = count(context)
-            if not 0 <= count:
-                raise RangeError("invalid count %s" % (count,))
-        obj = ListContainer()
-        last_element = None
-        include_last = True
-        i = 0
-        if count == 0:
-            # TODO test count 0
-            return obj
-        while True:
-            context._index = i
-            context._arr = obj
-            e = self.subcon._parsereport(stream, context, path)
-            # XXX this should be elsewhere ?
-            if hasattr(e, "_add"):
-                include_last = False
-                if e._add != None:
-                    obj += e._add
+        value = data.data[0] | (data.data[1] << 8)
+        return self(value=value, data=data)
+
+class U32(Primitive):
+    pass
+
+class Container(Primitive):
+    @classmethod
+    def parse_stream(self, stream):
+        contents = {}
+        for struct, type_ in self.contents.items():
+            contents[struct] = type_.parse_stream(stream)
+        
+        return make_container(contents)()
+    
+    @classmethod
+    def resolve(self, ctx=None):
+        if not ctx: ctx = []
+        ctx.append(self)
+        for name, type_ in self.contents.items():
+            if isinstance(type_, LazyType):
+                if str(type_) in ctx[0].contents:
+                    self.contents[name] = ctx[0].contents[type_]
+                    found = True
+                if not found:
+                    raise ValueError(f"Cannot resolve type {type_}, TODO context")
             else:
-                try:
-                    if type(last_element) == EnumElement or type(e) == EnumElement:
-                        last_element += e
-                    else:
-                        raise TypeError
-                except TypeError:
-                    if last_element != None:
-                        obj.append(last_element)
-                    last_element = e
-            i += 1
-            if i == count: break
-            if predicate != None:
-                end, include_last = predicate(e, obj, path)
-                if end:
-                    break
-        if include_last:
-            obj.append(last_element)
-        return obj
-        
-class JoiningTerminatedArray(JoiningArray):
-    def __init__(self, predicate, subcon, discard=False):
-        super(Array, self).__init__(subcon)
-        self.predicate = predicate
-        self.discard = discard
-        self.count = None
-
-    def _sizeof(self, context, path):
-        raise SizeofError("cannot calculate size, amount depends on actual data")
-
-def to_lines(image, width):
-    """
-    Convert a tiled quaternary pixel map to lines of quaternary pixels.
+                type_.resolve(ctx)
     
-    From pret/gfx.py
-    """
-    tile_width = 8
-    tile_height = 8
-    num_columns = width // tile_width
-    height = len(image) // width
-
-    lines = []
-    for cur_line in range(height):
-        tile_row = cur_line // tile_height
-        line = []
-        for column in range(num_columns):
-            anchor = (
-                num_columns * tile_row * tile_width * tile_height +
-                column * tile_width * tile_height +
-                cur_line % tile_height * tile_width
-            )
-            line += image[anchor : anchor + tile_width]
-        lines += [line]
-    return lines
-
-
-def func_gfx(tiles, palette):
-    w = png.writer()
-    
-
-class WithPositionInContext(Subconstruct):
-    def _parse(self, stream, context, path):
-        context['_gfx'] = func_gfx
-        context['_pos'] = stream.tell()
-        context['_path'] = path
-        # propagate _index
-        propagate = "_index _arr".split()
-        for p in propagate:
-            c = context
-            while p not in c and hasattr(c, '_'):
-                c = c._
-            if p in c:
-                context[p] = c[p]
+    def python_value(self):
+        out = {}
+        for struct_name, struct in self.contents.items():
+            out[struct_name] = struct.python_value()
         
-        return self.subcon._parsereport(stream, context, path)
+        return out
+    
+    def __str__(self):
+        print(f"Primitive({repr(self.name)})")
 
-# Monkeypatch Construct
-container___eq___old = Container.__eq__
-def container___eq__(self, other):
-    if "_val" in self:
-        return self._val == other
-    else:
-        return container___eq___old(self, other)
-Container.__eq__ = container___eq__
+class LazyType(str):
+    pass
 
-container___str___old = Container.__str__
-def container___str__(self):
-    if "_val" in self:
-        return str(self._val)
-    else:
-        return container___str___old(self)
-Container.__str__ = container___str__
+def make_container(struct):
+    return type('runtime_generated_container', (Container,), {'contents': struct})
 
-def perform_on__val(method_name):
-    def method(self, other):
-        if "_val" in self:
-            return getattr(self._val, method_name)(other)
-    return method
-
-for method_name in "lt le eq ne gt ge int".split():
-    method_name = f"__{method_name}__"
-    #setattr(Container, method_name, perform_on__val(method_name))
-
-def whack__val_from(obj):
-    if hasattr(obj, "_val"):
-        while hasattr(obj, "_val") and obj._val != None:
-            obj = obj._val
-        return obj
-    elif callable(obj):
-        return lambda *args, **kvargs: whack__val_from(obj(*args, **kvargs))
-    else:
-        return obj
+primitive_types = {
+    "u8": U8,
+    "u16": U16,
+    "u32": U32
+}
 
 class TreeToStruct(Transformer):
     def __init__(self, structs_by_name, path):
@@ -288,174 +169,62 @@ class TreeToStruct(Transformer):
         return dict(tree)
     
     def type(self, token):
-        name = token[0]
-        if isinstance(name, Construct):
-            return name
-        elif name in CONSTRUCT_ALIASES:
-            return CONSTRUCT_ALIASES[name]
-        elif name in "u1 u2 u3 u4 u5 u6 u7".split():
-            return BitsInteger(int(name[1]))
+        type_ = token[0]
+        if isinstance(type_, type) and issubclass(type_, Container):
+            return type_
+        elif isinstance(type_, str):
+            if type_ in primitive_types:
+                return primitive_types[type_]
+            elif type_ in "u1 u2 u3 u4 u5 u6 u7".split():
+                raise NotImplementedError()
+                #return BitsInteger(int(name[1]))
+            else:
+                return LazyType(type_)
         else:
-            name = str(name)
-            def func_type():
-                if name not in self.structs_by_name:
-                    raise NameError(f"Type {name} not defined in this context")
-                return self.structs_by_name[name]
-            return LazyBound(func_type)
+            raise ValueError(f"Unknown type {type_}")
+            raise NotImplementedError()
     
     def typedef(self, tree):
         struct = []
-        bitstruct = []
-        has_bit = False
-        has_byte = False
         
-        flat_tree = []
         for field in tree:
-            if isinstance(field, list):
-                flat_tree += field
-            else:
-                flat_tree.append(field)
+            struct.append(field)
         
-        for field in flat_tree:
-            f = field
-            while hasattr(f, 'subcon'):
-                f = f.subcon
-            if isinstance(f, BitsInteger):
-                has_bit = True
-                bitstruct.append(field)
-            elif isinstance(f, Computed):
-                bitstruct.append(field)
-                struct.append(field)
-            else:
-                has_byte = True
-                struct.append(field)
-        if has_bit and has_byte:
-            raise ValueError("Cannot mix bit and byte fields within struct")
-        if has_bit:
-            return BitsSwapped(BitStruct(*bitstruct))
-        elif has_byte or struct:
-            return Struct(*struct)
-        else:
-            return Struct()
+        return make_container(dict(struct))
     
     def type_enum(self, tree):
-        return TypedEnum(tree[0], tree[1])
+        raise NotImplementedError()
     
     def equ_field(self, f):
-        name = f[0].value
-        value = f[1]
-        
-        return name / WithPositionInContext(Computed(value))
+        raise NotImplementedError()
     
     def if_field(self, f):
         cond = self._eval_ctx(f[0][4:])
-        # simulate an embedded if
-        fields = []
-        ifname = f"__if_{self.ifcounter}"
-        fields.append(ifname / WithPositionInContext(Computed(cond)))
-        fields1 = f[1].subcons
-        fields0 = f[2].subcons if len(f) == 3 else []
         
-        passed_0 = []
-        while fields1:
-            f1 = fields1.pop(0)
-            name = f1.name
-            matched = False
-            if name in passed_0:
-                raise Exception(f"Error: Crossing field {name} in conditional block.  This is unsupported in current implementation.")
-            for f0 in fields0:
-                if f0.name == name:
-                    matched = True
-            if matched:
-                f0 = None
-                while True:
-                    f0 = fields0.pop(0)
-                    if f0.name != name:
-                        fields.append(f0.name / If(self._eval_ctx("not "+ifname), f0))
-                        passed_0.append(f0.name)
-                    else:
-                        fields.append(name / IfThenElse(self._eval_ctx(ifname), f1, f0))
-                        break
-            else:
-                fields.append(name / If(self._eval_ctx(ifname), f1))
-        for f0 in fields0:
-            name = f0.name
-            fields.append(name / If(self._eval_ctx("not "+ifname), f0))
-        
-        assert type(f[1]) == Struct
-        for field in f[1].subcons:
-            name = field.name
-            fields.append(name / If(self._eval_ctx(ifname), field))
-        if len(f) == 3:
-            assert type(f[2]) == Struct
-            for field in f[2].subcons:
-                name = field.name
-                fields.append(name / If(self._eval_ctx("not "+ifname), field))
-        self.ifcounter += 1
-        return fields
+        raise NotImplementedError()
     
     def assert_field(self, f):
         cond = self._eval_ctx(f[0][8:])
         
-        return Check(cond)
+        raise NotImplementedError()
     
     def type_count(self, f):
-        count_tree, type_ = f
-        if count_tree.children:
-            count = whack__val_from(count_tree.children[0])
-        else:
-            count = None
-            
-        if count:
-            type_ = JoiningArray(count, type_)
-        else:
-            def predicate(obj, lst, ctx):
-                # XXX should this be _end instead?
-                if hasattr(obj, "_stop"):
-                    if obj._stop:
-                        return True, True
-                if hasattr(type_.subcon, 'subconfunc'):
-                    t = type_.subcon.subconfunc()
-                else:
-                    t = type_.subcon
-                if hasattr(t, "_end"):
-                    #print("has _end", t._end, type(t._end), obj, type(obj))
-                    include_last = True
-                    if type(obj) == EnumElement and type(obj.value) == Token:
-                        include_last = not obj.value.startswith("_")
-                    end = t._end
-                    if hasattr(end, "__iter__"):
-                        if obj in end:
-                            return True, include_last
-                    else:
-                        if obj == end:
-                            return True, include_last
-                elif not obj:
-                    return True, False
-                return False, False
-            type_ = JoiningTerminatedArray(predicate, type_)
-        
-        return type_
+        raise NotImplementedError()
     
     def field(self, f):
         name = f[0].value
         params = f[1]
-        array = False
-        count = None
-        pointer = None
         for param in params.children:
             if param.data == "pointer":
-                pointer = whack__val_from(self._eval_ctx(param.children[0][1:]))
+                #pointer = whack__val_from(self._eval_ctx(param.children[0][1:]))
+                raise NotImplementedError()
             else:
                 raise ValueError(f"Unknown param type: {param.data}")
         type_ = f[2]
         
-        if pointer != None:
-            field = name / Pointer(pointer, type_)
-        else:
-            field = name / type_
+        field = type_
         
-        return field
+        return (name, field)
     
     def import_(self, token):
         path = token[0] + ".dm"
@@ -465,39 +234,13 @@ class TreeToStruct(Transformer):
         return parse_definition(open(path))
     
     def start(self, structs):
-        flat_structs = []
-        for struct in structs:
-            if type(struct) == list:
-                flat_structs += struct
-            elif struct.name == None and hasattr(struct, "subcons"):
-                flat_structs += struct.subcons
-            else:
-                flat_structs.append(struct)
-                
-        self.structs_by_name = {s.name: s for s in flat_structs}
+        self.structs_by_name = dict(structs)
         
-        result = Struct(*flat_structs)
+        result = make_container(dict(structs))
         return result
         
 grammar = open(sys.path[0]+"/grammar.g").read()
 
-def container_representer(dumper, data):
-    if "_val" in data:
-        return dumper.represent_data(data._val)
-    else:
-        data = dict({k:v for k,v in data.items() if not k.startswith("_")})
-        return dumper.represent_data(data)
-yaml.add_representer(Container, container_representer)
-def list_container_representer(dumper, data):
-    return dumper.represent_data(list(data))
-yaml.add_representer(ListContainer, list_container_representer)
-# TODO improve
-def enum_integer_representer(dumper, data):
-    return dumper.represent_data(int(data))
-yaml.add_representer(EnumInteger, enum_integer_representer)
-def enum_element_representer(dumper, data):
-    return dumper.represent_data(str(data.value))
-yaml.add_representer(EnumElement, enum_element_representer)
 parser = Lark(grammar, parser='lalr')
 
 def parse_definition(definition):
@@ -512,19 +255,22 @@ def parse_definition(definition):
     transformer = TreeToStruct(structs_by_name, path)
     struct = transformer.transform(parser.parse(definition))
     
+    struct.resolve()
+    
     return struct
 
 def parse(definition, data):
     struct = parse_definition(definition)
-    if hasattr(struct, "_start"):
-        start = struct._start
+    
+    if '_start' in struct.contents:
+        start = struct.contents['_start']
     else:
         start = struct
     
-    if type(data) != bytes:
-        result = start.parse_stream(data)
-    else:
-        result = start.parse(data)
+    if type(data) == bytes:
+        data = BytesIO(data)
+    
+    result = start.parse_stream(data)
 
     result._structs = struct
     return result
@@ -537,4 +283,4 @@ if __name__ == "__main__":
     
     result = parse(open(STRUCTF), open(FILEF, "rb"))
     #print(result)
-    print(yaml.dump(result))
+    print(yaml.dump(result.python_value()))
