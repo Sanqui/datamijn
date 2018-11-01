@@ -20,8 +20,8 @@ class Data():
 
 class Primitive():
     def __init__(self, value=None, data=None):
-        self.value = value
-        self.data = data
+        self._value = value
+        self._data = data
     
     @classmethod
     def parse_stream(self, stream):
@@ -36,12 +36,15 @@ class Primitive():
         return
     
     def python_value(self):
-        return self.value
+        return self._value
     
     def __repr__(self):
-        print(f"Primitive({repr(self.name)})")
+        if self._value:
+            return f"{self.__class__.__name__}({self._value})"
+        else:
+            return f"{self.__class__.__name__}"
 
-class U8(Primitive):
+class U8(Primitive, int):
     @classmethod
     def parse_stream(self, stream):
         address = stream.tell()
@@ -50,9 +53,13 @@ class U8(Primitive):
         data = Data(data=data, address=address, length=length)
         
         value = ord(data.data)
-        return self(value=value, data=data)
+        #return self(value=value, data=data)
+        obj = int.__new__(self, value)
+        obj._value = value
+        obj._data = data
+        return obj
 
-class U16(Primitive):
+class U16(Primitive, int):
     @classmethod
     def parse_stream(self, stream):
         address = stream.tell()
@@ -61,7 +68,11 @@ class U16(Primitive):
         data = Data(data=data, address=address, length=length)
         
         value = data.data[0] | (data.data[1] << 8)
-        return self(value=value, data=data)
+        #return self(value=value, data=data)
+        obj = int.__new__(self, value)
+        obj._value = value
+        obj._data = data
+        return obj
 
 class U32(Primitive):
     pass
@@ -70,7 +81,7 @@ class Container(Primitive):
     @classmethod
     def parse_stream(self, stream):
         contents = {}
-        for struct, type_ in self.contents.items():
+        for struct, type_ in self._contents.items():
             contents[struct] = type_.parse_stream(stream)
         
         return make_container(contents)()
@@ -79,31 +90,34 @@ class Container(Primitive):
     def resolve(self, ctx=None):
         if not ctx: ctx = []
         ctx.append(self)
-        for name, type_ in self.contents.items():
+        for name, type_ in self._contents.items():
             if isinstance(type_, LazyType):
-                if str(type_) in ctx[0].contents:
-                    self.contents[name] = ctx[0].contents[type_]
+                if str(type_) in ctx[0]._contents:
+                    self._contents[name] = ctx[0]._contents[type_]
                     found = True
                 if not found:
                     raise ValueError(f"Cannot resolve type {type_}, TODO context")
             else:
                 type_.resolve(ctx)
-    
+        
     def python_value(self):
         out = {}
-        for struct_name, struct in self.contents.items():
+        for struct_name, struct in self._contents.items():
             out[struct_name] = struct.python_value()
         
         return out
     
-    def __str__(self):
-        print(f"Primitive({repr(self.name)})")
+    def __getattr__(self, name):
+        return self._contents[name]
+    
+    #def __str__(self):
+    #    print(f"{self.__name__}")
 
 class LazyType(str):
     pass
 
 def make_container(struct):
-    return type('runtime_generated_container', (Container,), {'contents': struct})
+    return type('Container', (Container,), {'_contents': struct})
 
 primitive_types = {
     "u8": U8,
@@ -262,8 +276,9 @@ def parse_definition(definition):
 def parse(definition, data):
     struct = parse_definition(definition)
     
-    if '_start' in struct.contents:
-        start = struct.contents['_start']
+    # TODO move this in parse (or resolve)
+    if '_start' in struct._contents:
+        start = struct._contents['_start']
     else:
         start = struct
     
