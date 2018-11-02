@@ -8,6 +8,16 @@ from lark.tree import Tree
 import oyaml as yaml
 import png
 
+def whack__val_from(obj):
+    if hasattr(obj, "_val"):
+        while hasattr(obj, "_val") and obj._val != None:
+            obj = obj._val
+        return obj
+    elif callable(obj):
+        return lambda *args, **kvargs: whack__val_from(obj(*args, **kvargs))
+    else:
+        return obj
+
 class Token(str):
     def __repr__(self):
         return f"Token({self})"
@@ -85,6 +95,7 @@ class Array(list, Primitive):
             length = self._length(ctx[-1])
         else:
             length = self._length
+        length = whack__val_from(length)
         for i in range(length):
             contents.append(self._type.parse_stream(stream, ctx))
         
@@ -110,7 +121,8 @@ class Container(dict, Primitive):
         ctx.append(obj)
         for struct, type_ in self._contents.items():
             obj[struct] = type_.parse_stream(stream, ctx)
-        
+                
+        ctx.pop()
         return obj
     
     @classmethod
@@ -128,6 +140,14 @@ class Container(dict, Primitive):
             out[struct_name] = struct.python_value()
         
         return out
+    
+    def __eq__(self, other):
+        if super().__eq__(other):
+            return True
+        elif '_val' in self and self._val == other:
+            return True
+        else:
+            return False
     
     def __getattr__(self, name):
         if name in self:

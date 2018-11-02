@@ -99,8 +99,6 @@ bytes   [count]u8
     result = datamijn.parse(dm, b('aabb'))
     assert result.bytes == [0xaa, 0xbb]
 
-'''
-
 def test_array__val():
     dm = """
 test    {
@@ -112,6 +110,8 @@ bytes    [test] u8
     result = datamijn.parse(dm, b("aabb"))
     assert result.test == 2
     assert result.bytes == [0xaa, 0xbb]
+
+'''
 
 @pytest.mark.parametrize("test_hex", [True, False])
 def test_pointer(test_hex):
