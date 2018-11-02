@@ -33,13 +33,13 @@ class Primitive():
         
     @classmethod
     def resolve(self, ctx):
-        return
+        return self
     
     def python_value(self):
         return self._value
     
     def __repr__(self):
-        if self._value:
+        if hasattr(self, '_value'):
             return f"{self.__class__.__name__}({self._value})"
         else:
             return f"{self.__class__.__name__}"
@@ -77,6 +77,27 @@ class U16(Primitive, int):
 class U32(Primitive):
     pass
 
+class Array(list, Primitive):
+    @classmethod
+    def parse_stream(self, stream):
+        contents = []
+        for i in range(self._length):
+            contents.append(self._type.parse_stream(stream))
+        
+        return self(contents)
+    
+    @classmethod
+    def resolve(self, ctx):
+        self._type = self._type.resolve(ctx)
+        
+        return self
+    
+    def python_value(self):
+        return [o.python_value() for o in self]
+
+def make_array(type_, length):
+    return type('Array', (Array,), {'_type': type_, '_length': length})
+
 class Container(Primitive):
     @classmethod
     def parse_stream(self, stream):
@@ -91,14 +112,9 @@ class Container(Primitive):
         if not ctx: ctx = []
         ctx.append(self)
         for name, type_ in self._contents.items():
-            if isinstance(type_, LazyType):
-                if str(type_) in ctx[0]._contents:
-                    self._contents[name] = ctx[0]._contents[type_]
-                    found = True
-                if not found:
-                    raise ValueError(f"Cannot resolve type {type_}, TODO context")
-            else:
-                type_.resolve(ctx)
+            self._contents[name] = type_.resolve(ctx)
+        
+        return self
         
     def python_value(self):
         out = {}
@@ -114,7 +130,11 @@ class Container(Primitive):
     #    print(f"{self.__name__}")
 
 class LazyType(str):
-    pass
+    def resolve(self, ctx):
+        if str(self) in ctx[0]._contents:
+            return ctx[0]._contents[str(self)]
+        if not found:
+            raise ValueError(f"Cannot resolve type {type_}, TODO context")
 
 def make_container(struct):
     return type('Container', (Container,), {'_contents': struct})
@@ -223,7 +243,9 @@ class TreeToStruct(Transformer):
         raise NotImplementedError()
     
     def type_count(self, f):
-        raise NotImplementedError()
+        count_tree, type_ = f
+        count = count_tree.children[0]
+        return make_array(type_, count)
     
     def field(self, f):
         name = f[0].value

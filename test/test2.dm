@@ -9,7 +9,7 @@ coords {
 
 _start       {
     version         u16
-    positions       coords
+    positions       [0x2]coords
 }
 
 

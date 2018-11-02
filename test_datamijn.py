@@ -28,15 +28,23 @@ position  {
 }"""
     result = datamijn.parse(dm, b('1020'))
     assert result.position.x == 0x10
+    assert result.position.x._data.data == b('10')
+    assert result.position.x._data.address == 0x0
+    assert result.position.x._data.length == 0x1
     assert result.position.y == 0x20
+    assert result.position.y._data.data == b('20')
+    assert result.position.y._data.address == 0x1
+    assert result.position.y._data.length == 0x1
 
-'''
+
 
 def test_array():
     dm = """bytes   [6]u8"""
     
     result = datamijn.parse(dm, b('010203040506'))
     assert result.bytes == [1,2,3,4,5,6]
+
+'''
 
 def test_nested_array():
     dm = """bytes   [2][2][2]u8"""
