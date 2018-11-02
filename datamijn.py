@@ -24,7 +24,7 @@ class Primitive():
         self._data = data
     
     @classmethod
-    def parse_stream(self, stream):
+    def parse_stream(self, stream, ctx):
         raise NotImplementedError()
     
     @classmethod
@@ -46,7 +46,7 @@ class Primitive():
 
 class U8(Primitive, int):
     @classmethod
-    def parse_stream(self, stream):
+    def parse_stream(self, stream, ctx):
         address = stream.tell()
         length = 1
         data = stream.read(1)
@@ -61,7 +61,7 @@ class U8(Primitive, int):
 
 class U16(Primitive, int):
     @classmethod
-    def parse_stream(self, stream):
+    def parse_stream(self, stream, ctx):
         address = stream.tell()
         length = 2
         data = stream.read(2)
@@ -79,10 +79,14 @@ class U32(Primitive):
 
 class Array(list, Primitive):
     @classmethod
-    def parse_stream(self, stream):
+    def parse_stream(self, stream, ctx):
         contents = []
-        for i in range(self._length):
-            contents.append(self._type.parse_stream(stream))
+        if callable(self._length):
+            length = self._length(ctx[-1])
+        else:
+            length = self._length
+        for i in range(length):
+            contents.append(self._type.parse_stream(stream, ctx))
         
         return self(contents)
     
@@ -98,14 +102,16 @@ class Array(list, Primitive):
 def make_array(type_, length):
     return type('Array', (Array,), {'_type': type_, '_length': length})
 
-class Container(Primitive):
+class Container(dict, Primitive):
     @classmethod
-    def parse_stream(self, stream):
-        contents = {}
+    def parse_stream(self, stream, ctx=None):
+        if not ctx: ctx = []
+        obj = self()
+        ctx.append(obj)
         for struct, type_ in self._contents.items():
-            contents[struct] = type_.parse_stream(stream)
+            obj[struct] = type_.parse_stream(stream, ctx)
         
-        return make_container(contents)()
+        return obj
     
     @classmethod
     def resolve(self, ctx=None):
@@ -118,16 +124,23 @@ class Container(Primitive):
         
     def python_value(self):
         out = {}
-        for struct_name, struct in self._contents.items():
+        for struct_name, struct in self.items():
             out[struct_name] = struct.python_value()
         
         return out
     
     def __getattr__(self, name):
-        return self._contents[name]
+        if name in self:
+            return self[name]
+        else:
+            raise AttributeError()
+        #return self._contents[name]
     
     #def __str__(self):
     #    print(f"{self.__name__}")
+
+def make_container(struct):
+    return type('Container', (Container,), {'_contents': struct})
 
 class LazyType(str):
     def resolve(self, ctx):
@@ -136,8 +149,15 @@ class LazyType(str):
         if not found:
             raise ValueError(f"Cannot resolve type {type_}, TODO context")
 
-def make_container(struct):
-    return type('Container', (Container,), {'_contents': struct})
+class Computed():
+    def __init__(self, expr):
+        self.expr = expr
+    
+    def resolve(self, ctx):
+        return self
+
+    def parse_stream(self, stream, ctx):
+        return eval(self.expr, {**ctx[0]})
 
 primitive_types = {
     "u8": U8,
@@ -155,13 +175,13 @@ class TreeToStruct(Transformer):
         self.ifcounter = 0
     
     def _eval_ctx(self, expr):
-        def _eval_ctx_func(ctx):
-            try:
-                result = eval(expr, {**self.structs_by_name, **ctx})
-            except Exception as ex:
-                raise type(ex)(f"{ex}\nPath: {ctx._path}")
-            return result
-        return _eval_ctx_func
+        #def _eval_ctx_func(ctx):
+        #    try:
+        #        result = eval(expr, {**self.structs_by_name, **ctx})
+        #    except Exception as ex:
+        #        raise type(ex)(f"{ex}\nPath: {ctx._path}")
+        #    return result
+        return expr
     
     def string(self, token):
         return token[0][1:-1]
@@ -230,7 +250,10 @@ class TreeToStruct(Transformer):
         raise NotImplementedError()
     
     def equ_field(self, f):
-        raise NotImplementedError()
+        name = f[0].value
+        value = f[1]
+        
+        return (name, Computed(value))
     
     def if_field(self, f):
         cond = self._eval_ctx(f[0][4:])
@@ -321,3 +344,4 @@ if __name__ == "__main__":
     result = parse(open(STRUCTF), open(FILEF, "rb"))
     #print(result)
     print(yaml.dump(result.python_value()))
+    #print(yaml.dump(result))

@@ -35,16 +35,26 @@ position  {
     assert result.position.y._data.data == b('20')
     assert result.position.y._data.address == 0x1
     assert result.position.y._data.length == 0x1
+    
+    keys = ['x', 'y']
+    for key, real_key in zip(result.position, ['x', 'y']):
+        assert key == real_key
 
 
 
 def test_array():
     dm = """bytes   [6]u8"""
     
+    nums = [1, 2, 3, 4, 5, 6]
     result = datamijn.parse(dm, b('010203040506'))
-    assert result.bytes == [1,2,3,4,5,6]
+    
+    assert result.bytes == nums
+    
+    # test iteration
+    for byte, real in zip(result.bytes, nums):
+        assert byte == real
 
-'''
+
 
 def test_nested_array():
     dm = """bytes   [2][2][2]u8"""
@@ -55,18 +65,6 @@ def test_nested_array():
     assert result.bytes[1][0] == [5, 6]
     assert result.bytes[1][1] == [7, 8]
 
-def test_array_inline_typedef():
-    dm = """
-bytes   [2]{
-    a   u8
-    b   u8
-}"""
-    
-    result = datamijn.parse(dm, b('01020304'))
-    assert result.bytes[0].a == 1
-    assert result.bytes[0].b == 2
-    assert result.bytes[1].a == 3
-    assert result.bytes[1].b == 4
 
 def test_array_inline_typedef():
     dm = """
@@ -80,11 +78,28 @@ bytes   [2]{
     assert result.bytes[0].b == 2
     assert result.bytes[1].a == 3
     assert result.bytes[1].b == 4
+
 
 def test_array_hex():
     dm = "bytes [0xff]u8"
     result = datamijn.parse(dm, b('01')*0xff)
     assert len(result.bytes) == 0xff
+
+def test_equ():
+    dm = "test  = 5"
+    result = datamijn.parse(dm, b'')
+    assert result.test == 5
+
+
+def test_array_dynamic():
+    dm = """
+count   = 2
+bytes   [count]u8
+"""
+    result = datamijn.parse(dm, b('aabb'))
+    assert result.bytes == [0xaa, 0xbb]
+
+'''
 
 def test_array__val():
     dm = """
