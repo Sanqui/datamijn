@@ -111,14 +111,13 @@ bytes    [test] u8
     assert result.test == 2
     assert result.bytes == [0xaa, 0xbb]
 
-'''
-
 @pytest.mark.parametrize("test_hex", [True, False])
 def test_pointer(test_hex):
     ptr = "0x0a" if test_hex else "10"
     db = f"pointed_byte @{ptr} u8"
     result = datamijn.parse(db, b('00')*10 + b('01'))
     assert result.pointed_byte == 1
+    assert result.pointed_byte._data.address == 10
 
 def test_dynamic_pointer():
     db = """
@@ -173,6 +172,9 @@ test        u8 enum {
     result = datamijn.parse(db, b("02"))
     assert result.test == "two"
     assert result.test == 2
+
+
+'''
 
 def test_enum_missing():
     db = """

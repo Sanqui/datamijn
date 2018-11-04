@@ -169,6 +169,14 @@ class LazyType(str):
         if not found:
             raise ValueError(f"Cannot resolve type {type_}, TODO context")
 
+def eval_with_ctx(expr, ctx):
+    if len(ctx):
+        context = {**(ctx[0]), '_root': ctx[0]}
+    else:
+        context = {'_root': None}
+    
+    return whack__val_from(eval(expr, context))
+
 class Computed():
     def __init__(self, expr):
         self.expr = expr
@@ -177,7 +185,24 @@ class Computed():
         return self
 
     def parse_stream(self, stream, ctx):
-        return eval(self.expr, {**ctx[0]})
+        return eval_with_ctx(self.expr, ctx[0])
+
+class Pointer():
+    def __init__(self, inner, address_expr):
+        self.inner = inner
+        self.address_expr = address_expr
+    
+    def resolve(self, ctx):
+        self.inner = self.inner.resolve(ctx)
+        return self
+    
+    def parse_stream(self, stream, ctx):
+        address = eval_with_ctx(self.address_expr, ctx)
+        pos = stream.tell()
+        stream.seek(address)
+        obj = self.inner.parse_stream(stream, ctx)
+        stream.seek(pos)
+        return obj
 
 primitive_types = {
     "u8": U8,
@@ -232,7 +257,7 @@ class TreeToStruct(Transformer):
         if len(tree) == 1:
             val = self.enum_last + 1
         else:
-            val = tree[1](self._enum)
+            val = eval(tree[1], self._enum)
         self._enum[tree[0]] = val
         self.enum_last = val
         return (tree[0], val)
@@ -267,7 +292,7 @@ class TreeToStruct(Transformer):
         return make_container(dict(struct))
     
     def type_enum(self, tree):
-        raise NotImplementedError()
+        pass
     
     def equ_field(self, f):
         name = f[0].value
@@ -293,15 +318,15 @@ class TreeToStruct(Transformer):
     def field(self, f):
         name = f[0].value
         params = f[1]
-        for param in params.children:
-            if param.data == "pointer":
-                #pointer = whack__val_from(self._eval_ctx(param.children[0][1:]))
-                raise NotImplementedError()
-            else:
-                raise ValueError(f"Unknown param type: {param.data}")
         type_ = f[2]
         
         field = type_
+        for param in params.children:
+            if param.data == "pointer":
+                #pointer = whack__val_from(self._eval_ctx(param.children[0][1:]))
+                field = Pointer(field, param.children[0][1:])
+            else:
+                raise ValueError(f"Unknown param type: {param.data}")
         
         return (name, field)
     
