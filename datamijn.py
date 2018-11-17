@@ -244,7 +244,7 @@ class TreeToStruct(Transformer):
             try:
                 result = eval(expr, {**self.structs_by_name, **ctx})
             except Exception as ex:
-                raise type(ex)(f"{ex}\nPath: {ctx._path}")
+                raise type(ex)(f"{ex}\nPath: {getattr(ctx, '_path', '???')}")
             return result
         return _eval_ctx_func
     
