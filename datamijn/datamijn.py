@@ -318,7 +318,7 @@ class TreeToStruct(Transformer):
         result = make_container(dict(structs))
         return result
         
-grammar = open(sys.path[0]+"/grammar.g").read()
+grammar = open(os.path.dirname(__file__)+"/grammar.g").read()
 
 parser = Lark(grammar, parser='lalr')
 
