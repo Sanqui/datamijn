@@ -479,7 +479,7 @@ class TreeToStruct(Transformer):
         result = Struct(*flat_structs)
         return result
         
-grammar = open(sys.path[0]+"/grammar.g").read()
+grammar = open(os.path.dirname(__file__)+"/grammar.g").read()
 
 def container_representer(dumper, data):
     if "_val" in data:
