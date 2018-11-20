@@ -49,6 +49,7 @@ field_params:
     | pointer
 
 field: NAME ctx_expr _NL+           -> equ_field
+     | ctx_expr _NL+                -> bare_equ_field
      | NAME field_params type _NL+  -> field
      | ":" NAME type _NL+           -> def_field
      | /\!if ([^\{]+)/ container ("!else" container)? _NL+ -> if_field

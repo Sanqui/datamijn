@@ -118,6 +118,13 @@ class Array(list, Primitive):
 def make_array(type_, length):
     return type('Array', (Array,), {'_type': type_, '_length': length})
 
+#class ContainerResult(dict):
+#    def __getattr__(self, name):
+#        if name in self:
+#            return self[name]
+#        else:
+#            raise AttributeError()
+
 class Container(dict, Primitive):
     @classmethod
     def parse_stream(self, stream, ctx=None):
@@ -126,9 +133,17 @@ class Container(dict, Primitive):
         ctx.append(obj)
         for struct, type_ in self._contents.items():
             obj[struct] = type_.parse_stream(stream, ctx)
-                
-        ctx.pop()
-        return obj
+        
+        if self._computed_value:
+            computed_value = self._computed_value.parse_stream(stream, ctx)
+            for name, value in obj.items():
+                setattr(computed_value, name, value)
+            
+            ctx.pop()
+            return computed_value
+        else:
+            ctx.pop()
+            return obj
     
     @classmethod
     def resolve(self, ctx=None):
@@ -146,13 +161,13 @@ class Container(dict, Primitive):
         
         return out
     
-    def __eq__(self, other):
-        if super().__eq__(other):
-            return True
-        elif '_val' in self and self._val == other:
-            return True
-        else:
-            return False
+    #def __eq__(self, other):
+    #    #if super().__eq__(other):
+    #    #    return True
+    #    elif '_val' in self and self._val == other:
+    #        return True
+    #    else:
+    #        return False
     
     def __getattr__(self, name):
         if name in self:
@@ -164,9 +179,9 @@ class Container(dict, Primitive):
     #def __str__(self):
     #    print(f"{self.__name__}")
 
-def make_container(struct, types=None):
+def make_container(struct, types=None, computed_value=None):
     if not types: types = {}
-    return type('Container', (Container,), {'_contents': struct, '_types': types})
+    return type('Container', (Container,), {'_contents': struct, '_types': types, '_computed_value': computed_value})
 
 class LazyType(str):
     def resolve(self, ctx):
@@ -179,7 +194,7 @@ class LazyType(str):
 
 def eval_with_ctx(expr, ctx):
     if len(ctx):
-        context = {**(ctx[0]), '_root': ctx[0]}
+        context = {**(ctx[-1]), '_root': ctx[0]}
     else:
         context = {'_root': None}
     
@@ -193,7 +208,9 @@ class Computed():
         return self
 
     def parse_stream(self, stream, ctx):
-        return eval_with_ctx(self.expr, ctx[0])
+        result = eval_with_ctx(self.expr, ctx)
+        result = type(f'Computed_{type(result).__name__}', (type(result),), {})(result)
+        return result
 
 class Pointer():
     def __init__(self, inner, address_expr):
@@ -294,14 +311,20 @@ class TreeToStruct(Transformer):
     def container(self, tree):
         struct = []
         types = {}
+        computed_value = None
+        
+        if len(tree) and isinstance(tree[-1], Computed):
+            computed_value = tree.pop()
         
         for field in tree:
-            if isinstance(field, type) and issubclass(field, Primitive):
+            if isinstance(field, Computed):
+                raise SyntaxError("Bare non-computed value") # TODO nicer error
+            elif isinstance(field, type) and issubclass(field, Primitive):
                 types[field._name] = field
             else:
                 struct.append(field)
         
-        return make_container(dict(struct), types)
+        return make_container(dict(struct), types, computed_value)
     
     def type_enum(self, tree):
         pass
@@ -311,6 +334,11 @@ class TreeToStruct(Transformer):
         value = f[1]
         
         return (name, Computed(value))
+    
+    def bare_equ_field(self, f):
+        value = f[0]
+        
+        return Computed(value)
     
     def if_field(self, f):
         cond = self._eval_ctx(f[0][4:])

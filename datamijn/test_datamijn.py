@@ -107,10 +107,22 @@ bytes   [count]u8
     result = datamijn.parse(dm, b('aabb'))
     assert result.bytes == [0xaa, 0xbb]
 
-def test_array__val():
+def test_container_computed_value():
     dm = """
 test    {
-    _val    = 2
+    x       u8
+    = 2
+}
+"""
+    result = datamijn.parse(dm, b("aa"))
+    assert result.test.x == 0xaa
+    assert result.test == 2
+
+
+def test_array_computed():
+    dm = """
+test    {
+    = 2
 }
 
 bytes    [test] u8
@@ -157,10 +169,10 @@ vals            @val_ptr [val_count] u8
     result = datamijn.parse(db, data)
     assert result.vals == [0xaa, 0xbb, 0xcc]
 
-def test_pointer__val():
+def test_pointer_computed():
     dm = """
 test    {
-    _val    = 1
+    = 1
 }
 
 byte    @test u8
