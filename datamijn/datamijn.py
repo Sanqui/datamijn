@@ -1,4 +1,9 @@
 #!/usr/bin/python3
+
+# TODO study
+# https://docs.python.org/3/library/collections.abc.html#module-collections.abc
+# https://docs.python.org/3/library/numbers.html#module-numbers
+
 import sys
 import os.path
 from io import BytesIO
@@ -159,15 +164,18 @@ class Container(dict, Primitive):
     #def __str__(self):
     #    print(f"{self.__name__}")
 
-def make_container(struct):
-    return type('Container', (Container,), {'_contents': struct})
+def make_container(struct, types=None):
+    if not types: types = {}
+    return type('Container', (Container,), {'_contents': struct, '_types': types})
 
 class LazyType(str):
     def resolve(self, ctx):
-        if str(self) in ctx[0]._contents:
-            return ctx[0]._contents[str(self)]
+        # TODO recursive context!
+        if str(self) in ctx[0]._types:
+            return ctx[0]._types[str(self)]
+        found = False
         if not found:
-            raise ValueError(f"Cannot resolve type {type_}, TODO context")
+            raise NameError(f"Cannot resolve type {self}, TODO context")
 
 def eval_with_ctx(expr, ctx):
     if len(ctx):
@@ -283,13 +291,17 @@ class TreeToStruct(Transformer):
             raise ValueError(f"Unknown type {type_}")
             raise NotImplementedError()
     
-    def typedef(self, tree):
+    def container(self, tree):
         struct = []
+        types = {}
         
         for field in tree:
-            struct.append(field)
+            if isinstance(field, type) and issubclass(field, Primitive):
+                types[field._name] = field
+            else:
+                struct.append(field)
         
-        return make_container(dict(struct))
+        return make_container(dict(struct), types)
     
     def type_enum(self, tree):
         pass
@@ -330,6 +342,13 @@ class TreeToStruct(Transformer):
         
         return (name, field)
     
+    def def_field(self, f):
+        name = f[0].value
+        type_ = f[1]
+        
+        type_._name = name
+        return type_
+    
     def import_(self, token):
         path = token[0] + ".dm"
         if self.path:
@@ -337,11 +356,11 @@ class TreeToStruct(Transformer):
         
         return parse_definition(open(path))
     
-    def start(self, structs):
-        self.structs_by_name = dict(structs)
-        
-        result = make_container(dict(structs))
-        return result
+    #def start(self, structs):
+    #    self.structs_by_name = dict(structs)
+    #    
+    #    result = make_container(dict(structs))
+    #    return result
         
 grammar = open(os.path.dirname(__file__)+"/grammar.g").read()
 
@@ -366,11 +385,7 @@ def parse_definition(definition):
 def parse(definition, data):
     struct = parse_definition(definition)
     
-    # TODO move this in parse (or resolve)
-    if '_start' in struct._contents:
-        start = struct._contents['_start']
-    else:
-        start = struct
+    start = struct
     
     if type(data) == bytes:
         data = BytesIO(data)

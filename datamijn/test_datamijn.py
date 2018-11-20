@@ -1,7 +1,7 @@
 import pytest
 import os
 
-import datamijn
+from datamijn import datamijn
 
 from codecs import decode
 def b(string):
@@ -40,7 +40,15 @@ position  {
     for key, real_key in zip(result.position, ['x', 'y']):
         assert key == real_key
 
+def test_type_definition():
+    dm = """
+:Byte   u8
 
+value   Byte
+"""
+    result = datamijn.parse(dm, b('01'))
+    
+    assert result.value == 1
 
 def test_array():
     dm = """bytes   [6]u8"""
@@ -160,6 +168,7 @@ byte    @test u8
     result = datamijn.parse(dm, b("00aa"))
     assert result.test == 1
     assert result.byte == 0xaa
+'''
 
 def test_enum():
     db = """
@@ -174,7 +183,6 @@ test        u8 enum {
     assert result.test == 2
 
 
-'''
 
 def test_enum_missing():
     db = """
@@ -523,23 +531,26 @@ _start {
     assert result.color1 == result._structs.color.GREEN
     assert result.color2 == result._structs.color.RED
 
+'''
+
 def test_complex():
-    result = datamijn.parse(open("test/test.dm"),
-        open("test/test.bin", "rb"))
+    result = datamijn.parse(open("datamijn/test/test2.dm"),
+        open("datamijn/test/test.bin", "rb"))
     assert result.version == 0x123
     # don't test the rest because
     # it changes often
 
 def test_cleanup():
     dm = """
-a {
+:A {
     byte    u8
 }
-_start a"""
+
+a A"""
     result = datamijn.parse(dm, b"\x00")
     
     with pytest.raises(NameError):
-        dm2 = "_start a"
+        dm2 = "a A"
         result = datamijn.parse(dm2, b"\x00")
 
-'''
+

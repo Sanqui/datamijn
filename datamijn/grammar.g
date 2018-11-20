@@ -30,14 +30,14 @@ enum_field: enum_key ctx_expr? _NL  -> enum_field
 
 enum: "enum" "{" _NL enum_field+ "}"   -> enum
 
-typedef: "{" _NL+ field* "}" -> typedef
+container: "{" _NL+ field* "}" -> container
 
 count: "[" expr "]"
      | "[" ctx_name "]"
      | "[" "]"
 
 type: NAME                   -> type
-    | typedef
+    | container
     | count type             -> type_count
     | type enum              -> type_enum
 
@@ -50,8 +50,9 @@ field_params:
 
 field: NAME ctx_expr _NL+           -> equ_field
      | NAME field_params type _NL+  -> field
-     | /\!if ([^\{]+)/ typedef ("!else" typedef)? _NL+ -> if_field
-     | /\!assert(.*)/ _NL+         -> assert_field
+     | ":" NAME type _NL+           -> def_field
+     | /\!if ([^\{]+)/ container ("!else" container)? _NL+ -> if_field
+     | /\!assert(.*)/ _NL+          -> assert_field
 
 COMMENT: /\/\/.*/
 _NL: COMMENT? /(\r?\n[\t ]*)+/
@@ -59,5 +60,5 @@ _NL: COMMENT? /(\r?\n[\t ]*)+/
 ?topstatement: "!import" NAME _NL+  -> import_
              | field
 
-start: _NL* topstatement*           -> start
+start: _NL* topstatement*           -> container
 

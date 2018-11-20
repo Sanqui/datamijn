@@ -27,7 +27,7 @@ letter          u8 enum {
     "d"             = 3
     END             = 0xfe
     END2            = 0xff
-    _end           = (END, END2)
+    _end            = (END, END2)
 }
 
 terminated_string [] letter
