@@ -180,7 +180,7 @@ byte    @test u8
     result = datamijn.parse(dm, b("00aa"))
     assert result.test == 1
     assert result.byte == 0xaa
-'''
+
 
 def test_enum():
     db = """
@@ -192,8 +192,8 @@ test        u8 enum {
 }"""
     result = datamijn.parse(db, b("02"))
     assert result.test == "two"
-    assert result.test == 2
-
+    # This is no longer possible
+    #assert result.test == 2
 
 
 def test_enum_missing():
@@ -202,17 +202,20 @@ test       [2] u8 enum {
     zero       = 0
     one        = 1
 }"""
-    result = datamijn.parse(db, b("0105"))
-    assert result.test == ["one", 5]
+
+    with pytest.raises(KeyError):
+        result = datamijn.parse(db, b("0105"))
+    #assert result.test == ["one", 5]
+
 
 def test_enum_string():
     db = """
 test        u8 enum {
-    "a"        = 0
-    'b'        = 1
+    "a a"        = 0
+    'b b'        = 1
 }"""
     result = datamijn.parse(db, b("01"))
-    assert result.test == "b"
+    assert result.test == "b b"
 
 def test_enum_autoincrement():
     db = """
@@ -225,6 +228,9 @@ num        u8 enum {
 """
     result = datamijn.parse(db, b("21"))
     assert result.num == "two_one"
+
+
+'''
 
 def test_enum_string():
     db = """

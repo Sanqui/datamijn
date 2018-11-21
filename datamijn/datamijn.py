@@ -229,6 +229,27 @@ class Pointer():
         stream.seek(pos)
         return obj
 
+class EnumType(Primitive):
+    @classmethod
+    def resolve(self, ctx):
+        self._type = self._type.resolve(ctx)
+        
+        return self
+    
+    @classmethod
+    def parse_stream(self, stream, ctx):
+        value = self._type.parse_stream(stream, ctx)
+        
+        if value in self._enum_inv:
+            return self._enum_inv[value]
+        else:
+            # XXX improve this error
+            raise KeyError(f"Parsed value {value}, but not present in enum.")
+
+def make_enum_type(type_, enum):
+    enum_inv = {v: k for k, v in enum.items()}
+    return type('EnumType', (EnumType,), {'_type': type_, '_enum': enum, '_enum_inv': enum_inv})
+
 primitive_types = {
     "u8": U8,
     "u16": U16,
@@ -327,7 +348,9 @@ class TreeToStruct(Transformer):
         return make_container(dict(struct), types, computed_value)
     
     def type_enum(self, tree):
-        pass
+        type = tree[0]
+        enum = tree[1]
+        return make_enum_type(type, enum)
     
     def equ_field(self, f):
         name = f[0].value
