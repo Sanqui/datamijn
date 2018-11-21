@@ -23,12 +23,13 @@ ctx_expr: /=(.+)/          -> ctx_expr
 
 ctx_name: NAME             -> ctx_name
 
-enum_key: NAME             -> enum_token
-        | string           -> enum_str
+match_key: NUM "=>"        -> match_key_int
+    | string "=>"          -> match_key_string
 
-enum_field: enum_key ctx_expr? _NL  -> enum_field
+match_field: match_key? typename _NL+  -> match_field
+    |        match_key? typedef  _NL+  -> match_field
 
-enum: "enum" "{" _NL enum_field+ "}"   -> enum
+match: "match" "{" _NL match_field+ "}"   -> match
 
 container: "{" _NL+ field* "}" -> container
 
@@ -36,10 +37,12 @@ count: "[" expr "]"
      | "[" ctx_name "]"
      | "[" "]"
 
-type: NAME                   -> type
-    | container
+typename: NAME               -> typename
+
+type: typename               -> type_typename
+    | container              -> type_container
     | count type             -> type_count
-    | type enum              -> type_enum
+    | type match             -> type_match
 
 pointer: /@[^ ]*/
 // "@" expr    
@@ -48,10 +51,13 @@ pointer: /@[^ ]*/
 field_params:
     | pointer
 
+typedef: ":" NAME type              -> typedef
+    |    ":" NAME                   -> typedefvoid
+
 field: NAME ctx_expr _NL+           -> equ_field
      | ctx_expr _NL+                -> bare_equ_field
-     | NAME field_params type _NL+  -> field
-     | ":" NAME type _NL+           -> def_field
+     | NAME field_params type _NL+  -> instance_field
+     | typedef _NL+                 -> typedef_field
      | /\!if ([^\{]+)/ container ("!else" container)? _NL+ -> if_field
      | /\!assert(.*)/ _NL+          -> assert_field
 

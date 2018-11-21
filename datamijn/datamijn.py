@@ -50,7 +50,7 @@ class Primitive():
     def resolve(self, ctx):
         return self
     
-    def python_value(self):
+    def _python_value(self):
         return self._value
     
     def __repr__(self):
@@ -58,6 +58,20 @@ class Primitive():
             return f"{self.__class__.__name__}({self._value})"
         else:
             return f"{self.__class__.__name__}"
+
+class VoidType(Primitive):
+    @classmethod
+    def resolve(self, ctx):
+        return self
+    
+    @classmethod
+    def parse_stream(self, stream, ctx):
+        return self()
+    
+    @classmethod
+    def _python_value(self):
+        # XXX
+        return f"<{self.__name__}>"
 
 class U8(Primitive, int):
     @classmethod
@@ -112,8 +126,8 @@ class Array(list, Primitive):
         
         return self
     
-    def python_value(self):
-        return [o.python_value() for o in self]
+    def _python_value(self):
+        return [o._python_value() for o in self]
 
 def make_array(type_, length):
     return type('Array', (Array,), {'_type': type_, '_length': length})
@@ -154,10 +168,13 @@ class Container(dict, Primitive):
         
         return self
         
-    def python_value(self):
+    def _python_value(self):
         out = {}
         for struct_name, struct in self.items():
-            out[struct_name] = struct.python_value()
+            if hasattr(struct, "_python_value"):
+                out[str(struct_name)] = struct._python_value()
+            else:
+                out[str(struct_name)] = struct
         
         return out
     
@@ -209,7 +226,9 @@ class Computed():
 
     def parse_stream(self, stream, ctx):
         result = eval_with_ctx(self.expr, ctx)
-        result = type(f'Computed_{type(result).__name__}', (type(result),), {})(result)
+        result = type(f'Computed_{type(result).__name__}', (type(result),), {
+            '_type': type(result),
+            '_python_value': lambda self: self._type(self)})(result)
         return result
 
 class Pointer():
@@ -229,10 +248,12 @@ class Pointer():
         stream.seek(pos)
         return obj
 
-class EnumType(Primitive):
+class MatchType(Primitive):
     @classmethod
     def resolve(self, ctx):
         self._type = self._type.resolve(ctx)
+        for key, value in self._match.items():
+            self._match[key] = value.resolve(ctx)
         
         return self
     
@@ -240,15 +261,15 @@ class EnumType(Primitive):
     def parse_stream(self, stream, ctx):
         value = self._type.parse_stream(stream, ctx)
         
-        if value in self._enum_inv:
-            return self._enum_inv[value]
+        if value in self._match:
+            return self._match[value]()
         else:
             # XXX improve this error
-            raise KeyError(f"Parsed value {value}, but not present in enum.")
+            raise KeyError(f"Parsed value {value}, but not present in match.")
 
-def make_enum_type(type_, enum):
-    enum_inv = {v: k for k, v in enum.items()}
-    return type('EnumType', (EnumType,), {'_type': type_, '_enum': enum, '_enum_inv': enum_inv})
+def make_type_match(type_, match):
+    #enum_inv = {v: k for k, v in enum.items()}
+    return type('MatchType', (MatchType,), {'_type': type_, '_match': match})
 
 primitive_types = {
     "u8": U8,
@@ -260,9 +281,7 @@ class TreeToStruct(Transformer):
     def __init__(self, structs_by_name, path):
         self.structs_by_name = structs_by_name
         self.path = path
-        self.enum_last = -1
-        # XXX yes this is sadly an in-memory dupe
-        self._enum = {}
+        self.match_last = -1
         self.ifcounter = 0
     
     def _eval_ctx(self, expr):
@@ -293,31 +312,29 @@ class TreeToStruct(Transformer):
         
         return ctx_name(token[0].value)
     
-    def enum_token(self, token):
-        return Token(token[0])
+    def match_key_int(self, tree):
+        return int(tree[0])
     
-    def enum_str(self, token):
-        return token[0]
-        
-    def enum_field(self, tree):
+    def match_key_string(self, tree):
+        return str(tree[0])
+    
+    def match_field(self, tree):
         if len(tree) == 1:
-            val = self.enum_last + 1
+            key = self.match_last + 1
+            type_ = tree[0]
         else:
-            val = eval(tree[1], self._enum)
-        self._enum[tree[0]] = val
-        self.enum_last = val
-        return (tree[0], val)
+            key = tree[0]
+            type_ = tree[1]
+        self.match_last = key
+        return (key, type_)
     
-    def enum(self, tree):
-        self._enum = {}
-        self.enum_last = -1
+    def match(self, tree):
+        self.match_last = -1
         return dict(tree)
     
-    def type(self, token):
+    def typename(self, token):
         type_ = token[0]
-        if isinstance(type_, type) and issubclass(type_, Container):
-            return type_
-        elif isinstance(type_, str):
+        if isinstance(type_, str):
             if type_ in primitive_types:
                 return primitive_types[type_]
             elif type_ in "u1 u2 u3 u4 u5 u6 u7".split():
@@ -342,15 +359,18 @@ class TreeToStruct(Transformer):
                 raise SyntaxError("Bare non-computed value") # TODO nicer error
             elif isinstance(field, type) and issubclass(field, Primitive):
                 types[field._name] = field
-            else:
+            elif type(field) == tuple and len(field) == 2:
                 struct.append(field)
+            else:
+                print(tree)
+                raise RuntimeError(f"Internal error: unknown container field {field}")
         
         return make_container(dict(struct), types, computed_value)
     
-    def type_enum(self, tree):
+    def type_match(self, tree):
         type = tree[0]
-        enum = tree[1]
-        return make_enum_type(type, enum)
+        match = tree[1]
+        return make_type_match(type, match)
     
     def equ_field(self, f):
         name = f[0].value
@@ -373,13 +393,19 @@ class TreeToStruct(Transformer):
         
         raise NotImplementedError()
     
+    def type_typename(self, f):
+        return f[0]
+    
+    def type_container(self, f):
+        return f[0]
+    
     def type_count(self, f):
         count_tree, type_ = f
         count = count_tree.children[0]
         return make_array(type_, count)
     
-    def field(self, f):
-        name = f[0].value
+    def instance_field(self, f):
+        name = f[0]
         params = f[1]
         type_ = f[2]
         
@@ -393,12 +419,20 @@ class TreeToStruct(Transformer):
         
         return (name, field)
     
-    def def_field(self, f):
+    def typedef_field(self, f):
+        return f[0]
+    
+    def typedef(self, f):
         name = f[0].value
         type_ = f[1]
         
         type_._name = name
         return type_
+    
+    def typedefvoid(self, f):
+        name = f[0].value
+        
+        return type(name, (VoidType,), {})
     
     def import_(self, token):
         path = token[0] + ".dm"
@@ -454,5 +488,5 @@ if __name__ == "__main__":
     
     result = parse(open(STRUCTF), open(FILEF, "rb"))
     #print(result)
-    print(yaml.dump(result.python_value()))
+    print(yaml.dump(result._python_value()))
     #print(yaml.dump(result))

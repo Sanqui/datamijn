@@ -184,17 +184,18 @@ byte    @test u8
 
 def test_enum():
     db = """
-test        u8 enum {
-    zero       = 0
-    one        = 1
-    two        = 2
-    three      = 3
+test        u8 match {
+    0 => :Zero
+    1 => :One
+    2 => :Two
+    3 => :Three
 }"""
     result = datamijn.parse(db, b("02"))
-    assert result.test == "two"
-    # This is no longer possible
-    #assert result.test == 2
+    print(result.test)
+    raise
+    #assert result.test == result.test._
 
+'''
 
 def test_enum_missing():
     db = """
@@ -230,7 +231,7 @@ num        u8 enum {
     assert result.num == "two_one"
 
 
-'''
+
 
 def test_enum_string():
     db = """
