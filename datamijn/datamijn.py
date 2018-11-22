@@ -60,6 +60,9 @@ class Primitive():
             return f"{self.__class__.__name__}"
 
 class VoidType(Primitive):
+    def __init__(self):
+        pass
+    
     @classmethod
     def resolve(self, ctx):
         return self
@@ -67,6 +70,10 @@ class VoidType(Primitive):
     @classmethod
     def parse_stream(self, stream, ctx):
         return self()
+    
+    @property
+    def _typename(self):
+        return str(self.__class__.__name__)
     
     @classmethod
     def _python_value(self):
@@ -217,7 +224,7 @@ def eval_with_ctx(expr, ctx):
     
     return whack__val_from(eval(expr, context))
 
-class Computed():
+class Computed(Primitive):
     def __init__(self, expr):
         self.expr = expr
     
@@ -231,7 +238,7 @@ class Computed():
             '_python_value': lambda self: self._type(self)})(result)
         return result
 
-class Pointer():
+class Pointer(Primitive):
     def __init__(self, inner, address_expr):
         self.inner = inner
         self.address_expr = address_expr
@@ -248,6 +255,16 @@ class Pointer():
         stream.seek(pos)
         return obj
 
+class StringType(Primitive):
+    def __init__(self, string):
+        self.string = string
+    
+    def resolve(self, ctx):
+        return self
+
+    def parse_stream(self, stream, ctx):
+        return self.string
+
 class MatchType(Primitive):
     @classmethod
     def resolve(self, ctx):
@@ -262,7 +279,7 @@ class MatchType(Primitive):
         value = self._type.parse_stream(stream, ctx)
         
         if value in self._match:
-            return self._match[value]()
+            return self._match[value].parse_stream(stream, ctx)
         else:
             # XXX improve this error
             raise KeyError(f"Parsed value {value}, but not present in match.")
@@ -298,6 +315,9 @@ class TreeToStruct(Transformer):
     
     def eval(self, token):
         return eval(token[0])
+    
+    def stringtype(self, token):
+        return StringType(token[0])
     
     def ctx_expr(self, token):
         expr = token[0][1:]
@@ -432,7 +452,7 @@ class TreeToStruct(Transformer):
     def typedefvoid(self, f):
         name = f[0].value
         
-        return type(name, (VoidType,), {})
+        return type(name, (VoidType,), {"_name": name})
     
     def import_(self, token):
         path = token[0] + ".dm"

@@ -181,8 +181,17 @@ byte    @test u8
     assert result.test == 1
     assert result.byte == 0xaa
 
+def test_void_type():
+    dm = """
+:Token
 
-def test_enum():
+token   Token
+"""
+    result = datamijn.parse(dm, b("ff"))
+    assert result.token
+    assert result.token._typename == "Token"
+
+def test_match():
     db = """
 test        u8 match {
     0 => :Zero
@@ -191,17 +200,14 @@ test        u8 match {
     3 => :Three
 }"""
     result = datamijn.parse(db, b("02"))
-    print(result.test)
-    raise
-    #assert result.test == result.test._
+    assert result.test._typename == "Two"
 
-'''
 
-def test_enum_missing():
+def test_mafch_missing():
     db = """
-test       [2] u8 enum {
-    zero       = 0
-    one        = 1
+test       [2] u8 match {
+    0 => :Zero
+    1 => :One
 }"""
 
     with pytest.raises(KeyError):
@@ -209,28 +215,29 @@ test       [2] u8 enum {
     #assert result.test == ["one", 5]
 
 
-def test_enum_string():
+def test_match_string():
     db = """
-test        u8 enum {
-    "a a"        = 0
-    'b b'        = 1
+test        u8 match {
+    0 => "a a"
+    1 => 'b b'
 }"""
     result = datamijn.parse(db, b("01"))
     assert result.test == "b b"
 
-def test_enum_autoincrement():
+
+def test_match_autoincrement():
     db = """
-num        u8 enum {
-    zero
-    two_oh     = 0x20
-    two_one
-    four_oh    = 0x40
+num        u8 match {
+             :Zero
+    0x20  => :TwoOh
+             :TwoOne
+    0x40  => :FourOh
 }
 """
     result = datamijn.parse(db, b("21"))
-    assert result.num == "two_one"
+    assert result.num._typename == "TwoOne"
 
-
+'''
 
 
 def test_enum_string():

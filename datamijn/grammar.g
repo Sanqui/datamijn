@@ -23,11 +23,14 @@ ctx_expr: /=(.+)/          -> ctx_expr
 
 ctx_name: NAME             -> ctx_name
 
-match_key: NUM "=>"        -> match_key_int
+match_key: expr "=>"       -> match_key_int
     | string "=>"          -> match_key_string
+
+stringtype: string         -> stringtype
 
 match_field: match_key? typename _NL+  -> match_field
     |        match_key? typedef  _NL+  -> match_field
+    |        match_key? stringtype _NL+  -> match_field
 
 match: "match" "{" _NL match_field+ "}"   -> match
 
