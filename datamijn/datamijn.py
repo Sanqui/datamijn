@@ -79,6 +79,14 @@ class VoidType(Primitive):
     def _python_value(self):
         # XXX
         return f"<{self.__name__}>"
+    
+    def __eq__(self, other):
+        if type(self) == type(other):
+            return True
+        elif type(self) == other:
+            return True
+        else:
+            return False
 
 class U8(Primitive, int):
     @classmethod
@@ -196,6 +204,8 @@ class Container(dict, Primitive):
     def __getattr__(self, name):
         if name in self:
             return self[name]
+        elif name in self._types:
+            return self._types[name]
         else:
             raise AttributeError()
         #return self._contents[name]
@@ -265,7 +275,13 @@ class StringType(Primitive):
     def parse_stream(self, stream, ctx):
         return self.string
 
-class MatchType(Primitive):
+class MatchTypeMetaclass(type):
+    def __getattr__(self, name):
+        if name in self._match_types:
+            return self._match_types[name]
+
+class MatchType(Primitive, metaclass=MatchTypeMetaclass):
+    
     @classmethod
     def resolve(self, ctx):
         self._type = self._type.resolve(ctx)
@@ -283,10 +299,11 @@ class MatchType(Primitive):
         else:
             # XXX improve this error
             raise KeyError(f"Parsed value {value}, but not present in match.")
+    
 
 def make_type_match(type_, match):
-    #enum_inv = {v: k for k, v in enum.items()}
-    return type('MatchType', (MatchType,), {'_type': type_, '_match': match})
+    match_types = {v.__name__: v for k, v in match.items() if isinstance(v, type) and issubclass(v, Primitive)}
+    return type('MatchType', (MatchType,), {'_type': type_, '_match': match, '_match_types': match_types})
 
 primitive_types = {
     "u8": U8,

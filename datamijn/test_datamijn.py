@@ -190,6 +190,9 @@ token   Token
     result = datamijn.parse(dm, b("ff"))
     assert result.token
     assert result.token._typename == "Token"
+    assert isinstance(result.token, result.Token)
+    assert result.token == result.Token()
+    assert result.token == result.Token
 
 def test_match():
     db = """
@@ -239,23 +242,22 @@ num        u8 match {
 
 '''
 
-
 def test_enum_string():
     db = """
-char        u8 enum {
-    "!"        = 0x21
-    "A"        = 0x41
-    "B"        = 0x42
-    "C"        = 0x43
-    END        = 0x00
+:Char        u8 match {
+    0x21 => "!"
+    0x41 => "A"
+    0x42 => "B"
+    0x43 => "C"
+    0x00 => :End
 }
 
-_start {
-    string      [5]char
-}
+string      [5]Char
 """
     result = datamijn.parse(db, b("4342412100"))
-    assert result.string == ["CBA!", result._structs.char.END]
+    assert result.string == ["CBA!", result.Char.End]
+
+
 
 def test_bits():
     dm = """
