@@ -272,8 +272,7 @@ string      [5]Char
     result = datamijn.parse(db, b("4342412100"))
     assert result.string == ["CBA!!", result.Char.End]
 
-'''
-
+@pytest.mark.xfail
 def test_bits():
     dm = """
 some_bits {
@@ -305,8 +304,7 @@ _start {
 """
     result = datamijn.parse(dm, b("aa"))
     assert result == [1, 0, 1, 0, 1, 0, 1, 0]
-
-'''
+    
 
 def test_empty():
     dm = """
@@ -363,54 +361,81 @@ numbers         [] {
     assert result.numbers[3] == datamijn.Terminator
     assert len(result.numbers) == 4
 
-'''
-
-def test__add_array():
+@pytest.mark.xfail # IDEA
+def test_fold_array():
     dm = """
-rle         [2] {
+rle         [2] fold {
     count      u8
     value      u8
-    _add       = [value] * count
+    = [value] * count
 }
 """
     result = datamijn.parse(dm, b("02000501"))
     assert result.rle == [0, 0, 1, 1, 1, 1, 1]
 
+
 def test_terminated_string():
     dm = """
-char        u8 enum {
-    "A"     = 0x41
-    "B"
-    "C"
-    _END    = 0x00
-    _end    = _END
+:Char        u8 char match {
+    0x41 => "A"
+            "B"
+            "C"
+    // ...
+    0x00 => :End Terminator
 }
-_start {
-    string      [] char
-}
+
+string      [] Char
 """
     result = datamijn.parse(dm, b"BACA\x00")
-    assert result.string == ["BACA"]
+    assert result.string == ["BACA", result.Char.End]
+    assert str(result.string) == "BACA"
 
 def test_multiple_terminated_string():
     dm = """
-char        u8 enum {
-    "A"     = 0x41
-    "B"
-    "C"
-    _END1    = 0x00
-    END2    = 0xff
-    _end    = (_END1, END2)
+:Char        u8 char match {
+    0x41 => "A"
+            "B"
+            "C"
+    
+    0x00 => :End1 Terminator
+    0xff => :End2 Terminator
 }
-_start {
-    string      [] char
-}
+
+string      [] Char
 """
     result = datamijn.parse(dm, b"BACA\x00")
-    assert result.string == ["BACA"]
+    assert result.string == ["BACA", result.Char.End1]
+    assert str(result.string) == "BACA"
     result = datamijn.parse(dm, b"CABA\xff")
-    assert result.string == ["CABA", result._structs.char.END2]
+    assert result.string == ["CABA", result.Char.End2]
+    assert str(result.string) == "CABA"
 
+def test_string_with_control_codes():
+    dm = """
+:Char        u8 char match {
+    0x20 => " "
+            "!"
+    0x41 => "A"
+            "B"
+            "C"
+            "D"
+            "E"
+            "F"
+    // ...
+    
+    0xe0 => :PlayerName
+    0xe1 => :TextSpeed  u8
+    
+    0x00 => :End Terminator
+}
+
+string      [] Char
+"""
+    result = datamijn.parse(dm, b"BAD \xe1\x05CAFE \xe0!\x00")
+    assert result.string == ["BAD ", result.Char.TextSpeed(5), "CAFE ", result.Char.PlayerName, "!", result.Char.End]
+    assert str(result.string) == "BAD <TextSpeed(5)>CAFE <PlayerName>!"
+
+'''
 def test_pos():
     dm = """
 pos0        = _pos

@@ -105,6 +105,10 @@ class U8(Primitive, int):
         obj._value = value
         obj._data = data
         return obj
+    
+    def __str__(self):
+        string = str(int(self))
+        return f"{self.__class__.__name__}({string})"
 
 class U16(Primitive, int):
     @classmethod
@@ -164,6 +168,21 @@ class Array(list, Primitive):
         self._type = self._type.resolve(ctx)
         
         return self
+    
+    def __str__(self):
+        if self._type._char:
+            string = ""
+            for item in self:
+                if isinstance(item, str):
+                    string += item
+                elif isinstance(item, Terminator):
+                    pass
+                else:
+                    string += f"<{str(item)}>"
+            
+            return string
+        else:
+            return str(self.contents)
     
     def _python_value(self):
         return [o._python_value() for o in self]
