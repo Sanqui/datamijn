@@ -34,6 +34,7 @@ class Data():
         self.length = length
 
 class Primitive():
+    _char = False
     def __init__(self, value=None, data=None):
         self._value = value
         self._data = data
@@ -60,7 +61,7 @@ class Primitive():
             return f"{self.__class__.__name__}"
 
 class VoidType(Primitive):
-    def __init__(self):
+    def __init__(self, self_=None):
         pass
     
     @classmethod
@@ -87,6 +88,8 @@ class VoidType(Primitive):
             return True
         else:
             return False
+
+class Terminator(VoidType): pass
 
 class U8(Primitive, int):
     @classmethod
@@ -130,8 +133,29 @@ class Array(list, Primitive):
         else:
             length = self._length
         length = whack__val_from(length)
-        for i in range(length):
-            contents.append(self._type.parse_stream(stream, ctx))
+        
+        i = 0
+        while True:
+            item = self._type.parse_stream(stream, ctx)
+            if self._type._char and isinstance(item, str) and contents and isinstance(contents[-1], str):
+                contents[-1] += item
+            else:
+                contents.append(item)
+            
+            i += 1
+            if length:
+                if i >= length:
+                    break
+            elif issubclass(self._type, int):
+                if contents[-1] == 0:
+                    break
+            elif isinstance(contents[-1], Terminator):
+                break
+            #else:
+            #    raise ValueError("Improper terminating condition")
+        
+        if self._type._char and len(contents) == 1 and isinstance(contents[0], str):
+            contents = contents[0]
         
         return self(contents)
     
@@ -221,7 +245,7 @@ class LazyType(str):
     def resolve(self, ctx):
         # TODO recursive context!
         if str(self) in ctx[0]._types:
-            return ctx[0]._types[str(self)]
+            return ctx[0]._types[str(self)].resolve(ctx)
         found = False
         if not found:
             raise NameError(f"Cannot resolve type {self}, TODO context")
@@ -231,6 +255,7 @@ def eval_with_ctx(expr, ctx):
         context = {**(ctx[-1]), '_root': ctx[0]}
     else:
         context = {'_root': None}
+    context['_terminator'] = Terminator() # XXX ?!
     
     return whack__val_from(eval(expr, context))
 
@@ -243,9 +268,10 @@ class Computed(Primitive):
 
     def parse_stream(self, stream, ctx):
         result = eval_with_ctx(self.expr, ctx)
-        result = type(f'Computed_{type(result).__name__}', (type(result),), {
-            '_type': type(result),
-            '_python_value': lambda self: self._type(self)})(result)
+        if not isinstance(result, VoidType):
+            result = type(f'Computed_{type(result).__name__}', (type(result),), {
+                '_type': type(result),
+                '_python_value': lambda self: self._type(self)})(result)
         return result
 
 class Pointer(Primitive):
@@ -301,14 +327,15 @@ class MatchType(Primitive, metaclass=MatchTypeMetaclass):
             raise KeyError(f"Parsed value {value}, but not present in match.")
     
 
-def make_type_match(type_, match):
+def make_type_match(type_, match, char=False):
     match_types = {v.__name__: v for k, v in match.items() if isinstance(v, type) and issubclass(v, Primitive)}
-    return type('MatchType', (MatchType,), {'_type': type_, '_match': match, '_match_types': match_types})
+    return type('MatchType', (MatchType,), {'_type': type_, '_match': match, '_match_types': match_types, '_char': char})
 
 primitive_types = {
     "u8": U8,
     "u16": U16,
-    "u32": U32
+    "u32": U32,
+    "Terminator": Terminator
 }
 
 class TreeToStruct(Transformer):
@@ -408,6 +435,11 @@ class TreeToStruct(Transformer):
         type = tree[0]
         match = tree[1]
         return make_type_match(type, match)
+        
+    def type_char_match(self, tree):
+        type = tree[0]
+        match = tree[1]
+        return make_type_match(type, match, char=True)
     
     def equ_field(self, f):
         name = f[0].value
@@ -438,7 +470,10 @@ class TreeToStruct(Transformer):
     
     def type_count(self, f):
         count_tree, type_ = f
-        count = count_tree.children[0]
+        if count_tree.children:
+            count = count_tree.children[0]
+        else:
+            count = None
         return make_array(type_, count)
     
     def instance_field(self, f):
@@ -463,8 +498,7 @@ class TreeToStruct(Transformer):
         name = f[0].value
         type_ = f[1]
         
-        type_._name = name
-        return type_
+        return type(name, (type_,), {"_name": name})
     
     def typedefvoid(self, f):
         name = f[0].value

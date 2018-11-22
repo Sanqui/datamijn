@@ -240,24 +240,39 @@ num        u8 match {
     result = datamijn.parse(db, b("21"))
     assert result.num._typename == "TwoOne"
 
-'''
 
-def test_enum_string():
+
+def test_match_string():
     db = """
 :Char        u8 match {
-    0x21 => "!"
+    0x21 => "!!"
     0x41 => "A"
     0x42 => "B"
     0x43 => "C"
-    0x00 => :End
+    0x00 => :End    Terminator
 }
 
 string      [5]Char
 """
     result = datamijn.parse(db, b("4342412100"))
-    assert result.string == ["CBA!", result.Char.End]
+    assert result.string == ["C", "B", "A", "!!", result.Char.End]
 
+def test_match_char_string():
+    db = """
+:Char        u8 char match {
+    0x21 => "!!"
+    0x41 => "A"
+    0x42 => "B"
+    0x43 => "C"
+    0x00 => :End    Terminator
+}
 
+string      [5]Char
+"""
+    result = datamijn.parse(db, b("4342412100"))
+    assert result.string == ["CBA!!", result.Char.End]
+
+'''
 
 def test_bits():
     dm = """
@@ -291,13 +306,16 @@ _start {
     result = datamijn.parse(dm, b("aa"))
     assert result == [1, 0, 1, 0, 1, 0, 1, 0]
 
+'''
+
 def test_empty():
     dm = """
 empty {
 
 }"""
     result = datamijn.parse(dm, b(""))
-    assert result.empty
+    assert result.empty != None
+
 
 def test_comment():
     dm = """
@@ -322,45 +340,30 @@ byte_plus_one   = byte + one
     assert result.one == 1
     assert result.byte_plus_one == 6
 
-def test_val():
-    dm = """
-negative_twice_byte {
-    _byte       u8
-    _val        = _byte * -2
-}
-
-_start {
-    a       negative_twice_byte
-}
-"""
-    
-    result = datamijn.parse(dm, b("05"))
-    assert result.a == -10
-    assert result.a._val == -10
-    assert result.a._byte == 5
-    assert str(result.a) == "-10"
 
 def test_zero_terminated_array():
     dm = """
 numbers         [] u8
 """
     result = datamijn.parse(dm, b("aabbcc00"))
-    assert result.numbers == [0xaa, 0xbb, 0xcc]
+    assert result.numbers == [0xaa, 0xbb, 0xcc, 0]
 
-def test__stop_terminated_array():
+
+def test_terminated_array():
     dm = """
 numbers         [] {
     number      u8
-    _stop       = number == 0xff
+    = _terminator if number == 0xff else number
 }
 """
     result = datamijn.parse(dm, b("000102ff"))
-    assert result.numbers[0].number == 0
-    assert result.numbers[1].number == 1
-    assert result.numbers[2].number == 2
-    assert result.numbers[3].number == 0xff
+    assert result.numbers[0] == 0
+    assert result.numbers[1] == 1
+    assert result.numbers[2] == 2
+    assert result.numbers[3] == datamijn.Terminator
     assert len(result.numbers) == 4
 
+'''
 
 def test__add_array():
     dm = """
