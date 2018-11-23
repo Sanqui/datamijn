@@ -124,6 +124,22 @@ class VoidType(Primitive):
 
 class Terminator(VoidType): pass
 
+class Byte(Primitive, bytes):
+    _char = True
+    @classmethod
+    def parse_stream(self, stream, ctx):
+        return self(stream.read(1))
+
+class Short(Primitive, bytes):
+    @classmethod
+    def parse_stream(self, stream, ctx):
+        return self(stream.read(2)[::-1])
+
+class Word(Primitive, bytes):
+    @classmethod
+    def parse_stream(self, stream, ctx):
+        return self(stream.read(4)[::-1])
+
 class B1(Primitive, int):
     _num_bits = 1
     @classmethod
@@ -192,7 +208,9 @@ class Array(list, Primitive):
         i = 0
         while True:
             item = self._type.parse_stream(stream, ctx)
-            if self._type._char and isinstance(item, str) and contents and isinstance(contents[-1], str):
+            if self._type._char and len(contents) and (
+                 (isinstance(item, str)   and isinstance(contents[-1], str))
+              or (isinstance(item, bytes) and isinstance(contents[-1], bytes))):
                 contents[-1] += item
             else:
                 contents.append(item)
@@ -209,10 +227,14 @@ class Array(list, Primitive):
             #else:
             #    raise ValueError("Improper terminating condition")
         
-        if self._type._char and len(contents) == 1 and isinstance(contents[0], str):
+        if self._type._char and len(contents) == 1 and (
+          isinstance(contents[0], str) or isinstance(contents[0], bytes)):
             contents = contents[0]
         
-        return self(contents)
+        if type(contents) == bytes:
+            return contents
+        else:
+            return self(contents)
     
     @classmethod
     def resolve(self, ctx):
@@ -401,13 +423,70 @@ def make_type_match(type_, match, char=False):
     match_types = {v.__name__: v for k, v in match.items() if isinstance(v, type) and issubclass(v, Primitive)}
     return type('MatchType', (MatchType,), {'_type': type_, '_match': match, '_match_types': match_types, '_char': char})
 
+class PipeStream(IOWithBits):
+    def __init__(self, stream, ctx, type_):
+        self._stream = stream
+        self._ctx = ctx
+        self._type = type_
+        
+        self._buffer = b""
+        
+        self._byte = None
+        self._bit_number = None
+    
+    def read(self, num):
+        while len(self._buffer) < num:
+            result = self._type.parse_stream(self._stream, self._ctx)
+            if not isinstance(result, bytes):
+                raise TypeError(f"Pipe received {type(result)}.  Only bytes may be passed through a pipe.")
+            self._buffer += result
+        
+        val = self._buffer[:num]
+        self._buffer = self._buffer[num:]
+        return val
+    
+    def tell(self):
+        return None
+    
+    @property
+    def empty(self):
+        return len(self._buffer) == 0 and not self._bit_number
+
+class Pipe(Primitive):
+    # _left_type
+    # _right_type
+    @classmethod
+    def resolve(self, ctx):
+        self._left_type = self._left_type.resolve(ctx)
+        self._right_type = self._right_type.resolve(ctx)
+        
+        return self
+    
+    @classmethod
+    def parse_stream(self, stream, ctx):
+        pipe_stream = PipeStream(stream, ctx, self._left_type)
+        result = self._right_type.parse_stream(pipe_stream, ctx)
+        if not pipe_stream.empty:
+            raise ValueError("Unaccounted data remaining in pipe.  TODO this should be suppressable")
+        return result
+
+def make_pipe(left_type, right_type):
+    return type(f"{left_type.__name__}Pipe{right_type.__name__}", (Pipe,), {
+        "_left_type": left_type,
+        "_right_type": right_type})
+
 primitive_types = {
     "b1": B1,
     "u8": U8,
     "u16": U16,
     "u32": U32,
+    "byte": Byte,
+    "short": Short,
+    "word": Word,
+    # TODO long
     "Terminator": Terminator
 }
+
 for i in range(2, 33):
     primitive_types[f"b{i}"] = make_bit_type(i)
 
@@ -503,6 +582,9 @@ class TreeToStruct(Transformer):
                 raise RuntimeError(f"Internal error: unknown container field {field}")
         
         return make_container(dict(struct), types, computed_value)
+    
+    def type_pipe(self, tree):
+        return make_pipe(*tree)
     
     def type_match(self, tree):
         type = tree[0]

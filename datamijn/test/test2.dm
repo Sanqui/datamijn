@@ -29,8 +29,9 @@ byte_plus_one   @0x40 BytePlusOne
 
 item_category   @0x20 ItemCategory
 
-bits            [8]b1
+bits            [16]b1
 
+bytenum         byte | u8
 
 
 

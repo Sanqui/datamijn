@@ -47,6 +47,7 @@ type: typename               -> type_typename
     | count type             -> type_count
     | type match             -> type_match
     | type "char" match      -> type_char_match
+    | type "|" type          -> type_pipe
 
 pointer: /@[^ ]*/
 // "@" expr    

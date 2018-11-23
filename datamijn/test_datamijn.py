@@ -285,7 +285,6 @@ bits            SomeBits
 following_byte  u8
 """
     result = datamijn.parse(dm, b("0744"))
-    print(result)
     assert result.bits.a == 1
     assert result.bits.b == 1
     assert result.bits.two == [1, 0]
@@ -445,6 +444,67 @@ string      [] Char
     result = datamijn.parse(dm, b"BAD \xe1\x05CAFE \xe0!\x00")
     assert result.string == ["BAD ", result.Char.TextSpeed(5), "CAFE ", result.Char.PlayerName, "!", result.Char.End]
     assert str(result.string) == "BAD <TextSpeed(5)>CAFE <PlayerName>!"
+
+def test_byte():
+    dm = """
+byte1    byte
+byte2    byte
+bytes    [4]byte
+"""
+    result = datamijn.parse(dm, b"a\xe3TEST")
+    assert result.byte1 == b"a"
+    assert result.byte2 == b"\xe3"
+    assert result.bytes == b"TEST"
+
+def test_byte_pipe():
+    dm = """
+num8     byte | u8
+num16    byte | u16
+bits     byte | {
+    a          b1
+    b          b1
+    two        [2]b1
+    rest       b4
+    more       [8]b1
+}
+"""
+    result = datamijn.parse(dm, b("1122330744ff"))
+    assert result.num8 == 0x11
+    assert result.num16 == 0x3322
+    assert result.bits.a == 1
+    assert result.bits.b == 1
+    assert result.bits.two == [1, 0]
+    assert result.bits.rest == 0
+
+def test_byte_pipe_unaccounted():
+    dm = """
+bits     byte | {
+    a          b1
+    b          b1
+    three      [3]b1
+    // 3 bits unaccounted for
+}
+"""
+    with pytest.raises(ValueError):
+        result = datamijn.parse(dm, b("11"))
+
+def test_short_pipe():
+    dm = """
+cards    short | [64]b9
+"""
+    result = datamijn.parse(dm, bytes([
+                                    0b00000010,
+                                    0b00000000,
+                                    
+                                    0b00011000,
+                                    0b00001000,
+                                    
+                                    0b10100000,
+                                    0b01000000,
+                                ] + [0]*100))
+    
+    assert result.cards[0:6] == [0, 1, 2, 3, 4, 5]
+    
 
 '''
 def test_pos():
