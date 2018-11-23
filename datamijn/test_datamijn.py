@@ -272,38 +272,49 @@ string      [5]Char
     result = datamijn.parse(db, b("4342412100"))
     assert result.string == ["CBA!!", result.Char.End]
 
-@pytest.mark.xfail
 def test_bits():
     dm = """
-some_bits {
-    a        u1
-    b        u1
-    two      [2]u1
-    rest     u4
+:SomeBits {
+    a          b1
+    b          b1
+    two        [2]b1
+    rest       b4
 }
 
-_start {
-    bits            some_bits
-    following_byte  u8
-}"""
-    result = datamijn.parse(dm, b("07ff"))
+bits            SomeBits
+following_byte  u8
+"""
+    result = datamijn.parse(dm, b("0744"))
     print(result)
     assert result.bits.a == 1
     assert result.bits.b == 1
     assert result.bits.two == [1, 0]
     assert result.bits.rest == 0
-    assert result.following_byte == 0xff
+    assert result.following_byte == 0x44
 
-@pytest.mark.xfail
 def test_bit_type():
     dm = """
-bits   [8]u1
-_start {
-    bits bits
-}
+:Bits   [8]b1
+bits    Bits
+
 """
     result = datamijn.parse(dm, b("aa"))
-    assert result == [1, 0, 1, 0, 1, 0, 1, 0]
+    assert result.bits == [0, 1, 0, 1, 0, 1, 0, 1]
+
+def test_bit_byte_boundary():
+    dm = """
+cards   [60]b9
+"""
+    result = datamijn.parse(dm, bytes([
+                                    0b00000000,
+                                    0b00000010,
+                                    0b00001000,
+                                    0b00011000,
+                                    0b01000000,
+                                    0b10100000,
+                                ] + [0]*100))
+    
+    assert result.cards[0:6] == [0, 1, 2, 3, 4, 5]
     
 
 def test_empty():

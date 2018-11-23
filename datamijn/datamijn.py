@@ -6,12 +6,45 @@
 
 import sys
 import os.path
-from io import BytesIO
+from io import BytesIO, BufferedIOBase
 
 from lark import Lark, Transformer
 from lark.tree import Tree
 import oyaml as yaml
 import png
+
+class IOWithBits(BufferedIOBase):
+    def read_bit(self):
+        if not hasattr(self, '_byte'):
+            self._byte = None
+            self._bit_number = None
+        
+        if self._byte == None:
+            self._byte = ord(self.read(1))
+            self._bit_number = 0
+        
+        bit = (self._byte >> self._bit_number) & 1
+        
+        self._bit_number += 1
+        if self._bit_number >= 8:
+            self._byte = None
+            self._bit_number = None
+        
+        return bit
+    
+    def read_bits(self, bits):
+        if bits == 1:
+            return self.read_bit()
+        num = 0
+        for i in range(bits):
+            num |= self.read_bit() << i
+        
+        return num
+    
+    def read(self, amount):
+        if getattr(self, '_byte', None) != None:
+            raise RuntimeError("Attempting to read bytes while not byte-aligned")
+        return super().read(amount)
 
 def whack__val_from(obj):
     if hasattr(obj, "_val"):
@@ -90,6 +123,24 @@ class VoidType(Primitive):
             return False
 
 class Terminator(VoidType): pass
+
+class B1(Primitive, int):
+    _num_bits = 1
+    @classmethod
+    def parse_stream(self, stream, ctx):
+        value = stream.read_bits(self._num_bits)
+        #return self(value=value, data=data)
+        obj = int.__new__(self, value)
+        obj._value = value
+        #obj._data = data
+        return obj
+    
+    def __str__(self):
+        string = str(int(self))
+        return f"{self.__class__.__name__}({string})"
+
+def make_bit_type(num_bits):
+    return type(f"B{num_bits}", (B1,), {"_num_bits": num_bits})
 
 class U8(Primitive, int):
     @classmethod
@@ -351,11 +402,14 @@ def make_type_match(type_, match, char=False):
     return type('MatchType', (MatchType,), {'_type': type_, '_match': match, '_match_types': match_types, '_char': char})
 
 primitive_types = {
+    "b1": B1,
     "u8": U8,
     "u16": U16,
     "u32": U32,
     "Terminator": Terminator
 }
+for i in range(2, 33):
+    primitive_types[f"b{i}"] = make_bit_type(i)
 
 class TreeToStruct(Transformer):
     def __init__(self, structs_by_name, path):
@@ -563,7 +617,11 @@ def parse(definition, data):
     start = struct
     
     if type(data) == bytes:
-        data = BytesIO(data)
+        type_ = BytesIO
+    else:
+        type_ = type(data)
+    
+    data = type(f"{type_.__name__}WithBits", (type_, IOWithBits), {})(data)
     
     result = start.parse_stream(data)
 
