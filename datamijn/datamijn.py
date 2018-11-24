@@ -68,6 +68,7 @@ class Data():
 
 class Primitive():
     _char = False
+    _embed = False
     def __init__(self, value=None, data=None):
         self._value = value
         self._data = data
@@ -295,6 +296,18 @@ class Container(dict, Primitive):
     def resolve(self, ctx=None):
         if not ctx: ctx = []
         ctx.append(self)
+        
+        new_types = {}
+        
+        for name, type_ in self._types.items():
+            resolved = type_.resolve(ctx)
+            if resolved._embed:
+                new_types.update(resolved._types)
+            else:
+                self._types[name] = resolved
+        
+        self._types.update(new_types)
+        
         for name, type_ in self._contents.items():
             self._contents[name] = type_.resolve(ctx)
         
@@ -707,7 +720,7 @@ class TreeToStruct(Transformer):
         if self.path:
             path = self.path + "/" + path
         
-        return parse_definition(open(path))
+        return parse_definition(open(path), name=token[0], embed=True)
     
     #def start(self, structs):
     #    self.structs_by_name = dict(structs)
@@ -719,7 +732,7 @@ grammar = open(os.path.dirname(__file__)+"/grammar.g").read()
 
 parser = Lark(grammar, parser='lalr')
 
-def parse_definition(definition):
+def parse_definition(definition, name=None, embed=False):
     path = ""
     if type(definition) != str:
         path = os.path.dirname(definition.name)
@@ -732,6 +745,10 @@ def parse_definition(definition):
     struct = transformer.transform(parser.parse(definition))
     
     struct.resolve()
+    if name:
+        struct._name = name
+    if embed:
+        struct._embed = embed
     
     return struct
 

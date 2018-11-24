@@ -695,9 +695,10 @@ byte        u8
     result = datamijn.parse(dm, b("05"))
     assert result.byte == 5
     
+'''
 
 def test_type_name_error():
-    dm = "something     noexist"
+    dm = "something     NoExist"
     
     with pytest.raises(NameError):
         result = datamijn.parse(dm, b"")
@@ -705,27 +706,24 @@ def test_type_name_error():
 
 def test_include(tmpdir):
     tmpdir.join("color.dm").write("""
-color   u8 enum {
-    WHITE      = 0
-    RED        = 1
-    GREEN      = 2
-    BLUE       = 3
+:Color   u8 match {
+    :White
+    :Red
+    :Green
+    :Blue
 }
 """)
     tmpdir.join("test.dm").write("""
 !import color
 
-_start {
-    color1      color
-    color2      color
-}
+color0      Color
+color1      Color
 """)
     
     result = datamijn.parse(open(tmpdir.join("test.dm")), b("0201"))
-    assert result.color1 == result._structs.color.GREEN
-    assert result.color2 == result._structs.color.RED
+    assert result.color0 == result.Color.Green
+    assert result.color1 == result.Color.Red
 
-'''
 
 def test_complex():
     result = datamijn.parse(open("datamijn/test/test2.dm"),
