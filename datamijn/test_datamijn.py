@@ -606,6 +606,19 @@ thing   u8 -> things
     assert result.thing.x == 0x20
     assert result.thing.y == 0x21
 
+def test_foreign_key_val():
+    dm = """
+things      [4]{
+    x   u8
+    y   u8
+}
+
+thing   (= 2) -> things
+"""
+    result = datamijn.parse(dm, b("0001 1011 2021 3031"))
+    assert result.thing.x == 0x20
+    assert result.thing.y == 0x21
+
 def test_foreign_key_error():
     dm = """
 things      [4]{

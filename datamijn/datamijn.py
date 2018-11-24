@@ -398,20 +398,23 @@ def eval_with_ctx(expr, ctx):
     return whack__val_from(eval(expr, context))
 
 class Computed(Primitive):
-    def __init__(self, expr):
-        self.expr = expr
-    
+    # _expr
+    @classmethod
     def resolve(self, ctx):
         return self
 
+    @classmethod
     def parse_stream(self, stream, ctx):
         ctx[-1]['_pos'] = stream.tell()
-        result = eval_with_ctx(self.expr, ctx)
+        result = eval_with_ctx(self._expr, ctx)
         if not isinstance(result, VoidType):
             result = type(f'Computed_{type(result).__name__}', (type(result),), {
                 '_type': type(result),
                 '_python_value': lambda self: self._type(self)})(result)
         return result
+
+def make_computed(expr):
+    return type("Computed", (Computed,), {'_expr': expr})
 
 class Pointer(Primitive):
     def __init__(self, inner, address_expr):
@@ -544,14 +547,15 @@ class ForeignKey(Primitive):
         
         foreign = ctx[0][self._field_name]
         
+        try:
+            val = foreign[result]
+        except IndexError:
+            raise IndexError(f"Indexing foreign list `{self._field_name}[{result}]` failed")
+        
         return self(result, foreign)
     
     def __getattr__(self, attr):
-        try:
-            val = self._foreign[self._result]
-        except IndexError:
-            raise IndexError(f"Indexing foreign list `{self._field_name}[{self._result}]` failed")
-        
+        val = self._foreign[self._result]
         return getattr(val, attr)
 
 def make_foreign_key(type_, field_name):
@@ -610,7 +614,10 @@ class TreeToStruct(Transformer):
         
         return self._eval_ctx(expr)
     
-    #def 
+    def ctx_expr_par(self, token):
+        expr = token[0][2:-1]
+        
+        return self._eval_ctx(expr)
     
     def ctx_name(self, token):
         def ctx_name(ref):
@@ -660,13 +667,13 @@ class TreeToStruct(Transformer):
         types = {}
         computed_value = None
         
-        if len(tree) and isinstance(tree[-1], Computed):
+        if len(tree) and isinstance(tree[-1], type) and issubclass(tree[-1], Computed):
             computed_value = tree.pop()
         
         for field in tree:
-            if isinstance(field, Computed):
+            if isinstance(field, type) and issubclass(field, Computed):
                 raise SyntaxError("Bare non-computed value") # TODO nicer error
-            elif isinstance(field, type) and issubclass(field, Primitive):
+            if isinstance(field, type) and issubclass(field, Primitive):
                 types[field._name] = field
             elif type(field) == tuple and len(field) == 2:
                 struct.append(field)
@@ -681,6 +688,10 @@ class TreeToStruct(Transformer):
     
     def type_foreign_key(self, tree):
         return make_foreign_key(*tree)
+    
+    def type_equ(self, tree):
+        value = tree[0]
+        return make_computed(value)
     
     def type_match(self, tree):
         type = tree[0]
@@ -705,12 +716,12 @@ class TreeToStruct(Transformer):
         name = f[0]
         value = f[1]
         
-        return (name, Computed(value))
+        return (name, make_computed(value))
     
     def bare_equ_field(self, f):
         value = f[0]
         
-        return Computed(value)
+        return make_computed(value)
     
     def if_field(self, f):
         cond = self._eval_ctx(f[0][4:])

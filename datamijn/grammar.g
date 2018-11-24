@@ -20,6 +20,7 @@ string: STRING_DBL -> string
 expr: EXPR -> eval
 
 ctx_expr: /=(.+)/          -> ctx_expr
+ctx_expr_par: /\(=([^\)]+)\)/      -> ctx_expr_par
 
 ctx_name: NAME             -> ctx_name
 
@@ -50,6 +51,7 @@ type: typename               -> type_typename
     | type "char" match      -> type_char_match
     | type "|" type          -> type_pipe
     | type "->" field_name   -> type_foreign_key
+    | ctx_expr_par           -> type_equ
 
 pointer: /@[^ ]*/
 // "@" expr    
