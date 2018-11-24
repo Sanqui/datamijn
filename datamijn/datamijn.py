@@ -301,10 +301,12 @@ class Container(dict, Primitive):
         return self
     
     def __setitem__(self, key, value):
-        if isinstance(key, tuple) and len(key) == 1:
+        while isinstance(key, tuple) and len(key) == 1:
             key = key[0]
         if isinstance(key, tuple):
-            self._ctx[-1][key[0]][key[1:]] = value
+            if key[0] not in self:
+                raise NameError(f"`{key[0]}` not in context")
+            self[key[0]][key[1:]] = value
         else:
             super().__setitem__(key, value)
         
@@ -607,13 +609,13 @@ class TreeToStruct(Transformer):
         return make_type_match(type, match, char=True)
     
     def field_name(self, f):
-        return f[0]
+        return str(f[0])
     
     def field_name_dot(self, f):
         return (f[0], f[1])
     
     def equ_field(self, f):
-        name = f[0].value
+        name = f[0]
         value = f[1]
         
         return (name, Computed(value))

@@ -507,16 +507,28 @@ cards    short | [64]b9
     
 def test_foreign_assignment():
     dm = """
-empty {
+struct {
     x       u8
+    nested {
+        
+    }
 }
 foo         u8
-empty.y     u8
+struct.y    u8
+struct.nested.bar u8
 """
-    result = datamijn.parse(dm, b("010203"))
-    assert result.empty.x == 1
+    result = datamijn.parse(dm, b("01020304"))
+    assert result.struct.x == 1
     assert result.foo == 2
-    assert result.empty.y == 3
+    assert result.struct.y == 3
+    assert result.struct.nested.bar == 4
+
+def test_foreign_assignment_error():
+    dm = """
+unknown.x     u8
+"""
+    with pytest.raises(NameError):
+        result = datamijn.parse(dm, b("01"))
     
 
 '''
