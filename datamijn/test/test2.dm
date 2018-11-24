@@ -33,5 +33,10 @@ bits            [16]b1
 
 bytenum         byte | u8
 
+struct          {
+
+}
+
+struct.x        u8
 
 

@@ -59,9 +59,12 @@ field_params:
 typedef: ":" NAME type              -> typedef
     |    ":" NAME                   -> typedefvoid
 
-field: NAME ctx_expr _NL+           -> equ_field
+field_name: NAME                    -> field_name
+    | field_name "." field_name     -> field_name_dot
+
+field: field_name ctx_expr _NL+           -> equ_field
      | ctx_expr _NL+                -> bare_equ_field
-     | NAME field_params type _NL+  -> instance_field
+     | field_name field_params type _NL+  -> instance_field
      | typedef _NL+                 -> typedef_field
      | /\!if ([^\{]+)/ container ("!else" container)? _NL+ -> if_field
      | /\!assert(.*)/ _NL+          -> assert_field

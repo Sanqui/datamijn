@@ -276,8 +276,9 @@ class Container(dict, Primitive):
         if not ctx: ctx = []
         obj = self()
         ctx.append(obj)
-        for struct, type_ in self._contents.items():
-            obj[struct] = type_.parse_stream(stream, ctx)
+        obj._ctx = ctx
+        for name, type_ in self._contents.items():
+            obj[name] = type_.parse_stream(stream, ctx)
         
         if self._computed_value:
             computed_value = self._computed_value.parse_stream(stream, ctx)
@@ -298,7 +299,16 @@ class Container(dict, Primitive):
             self._contents[name] = type_.resolve(ctx)
         
         return self
+    
+    def __setitem__(self, key, value):
+        if isinstance(key, tuple) and len(key) == 1:
+            key = key[0]
+        if isinstance(key, tuple):
+            self._ctx[-1][key[0]][key[1:]] = value
+        else:
+            super().__setitem__(key, value)
         
+    
     def _python_value(self):
         out = {}
         for struct_name, struct in self.items():
@@ -595,6 +605,12 @@ class TreeToStruct(Transformer):
         type = tree[0]
         match = tree[1]
         return make_type_match(type, match, char=True)
+    
+    def field_name(self, f):
+        return f[0]
+    
+    def field_name_dot(self, f):
+        return (f[0], f[1])
     
     def equ_field(self, f):
         name = f[0].value

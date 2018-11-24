@@ -505,6 +505,19 @@ cards    short | [64]b9
     
     assert result.cards[0:6] == [0, 1, 2, 3, 4, 5]
     
+def test_foreign_assignment():
+    dm = """
+empty {
+    x       u8
+}
+foo         u8
+empty.y     u8
+"""
+    result = datamijn.parse(dm, b("010203"))
+    assert result.empty.x == 1
+    assert result.foo == 2
+    assert result.empty.y == 3
+    
 
 '''
 def test_pos():
