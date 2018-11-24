@@ -573,7 +573,6 @@ stuff[].b   [4]u8
     with pytest.raises(TypeError):
         result = datamijn.parse(dm, b("00"*100))
 
-'''
 def test_pos():
     dm = """
 pos0        = _pos
@@ -584,6 +583,8 @@ pos1        = _pos
     assert result.pos0 == 0
     assert result.short == 0xaaaa
     assert result.pos1 == 2
+
+'''
 
 def test_eval_enum_access():
     dm = """

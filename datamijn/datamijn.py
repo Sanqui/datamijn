@@ -401,6 +401,7 @@ class Computed(Primitive):
         return self
 
     def parse_stream(self, stream, ctx):
+        ctx[-1]['_pos'] = stream.tell()
         result = eval_with_ctx(self.expr, ctx)
         if not isinstance(result, VoidType):
             result = type(f'Computed_{type(result).__name__}', (type(result),), {
