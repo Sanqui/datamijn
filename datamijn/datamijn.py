@@ -378,8 +378,9 @@ def make_container(struct, types=None, computed_value=None):
 class LazyType(str):
     def resolve(self, ctx):
         # TODO recursive context!
-        if str(self) in ctx[0]._types:
-            return ctx[0]._types[str(self)].resolve(ctx)
+        for context in reversed(ctx):
+            if str(self) in context._types:
+                return context._types[str(self)].resolve(ctx)
         found = False
         if not found:
             raise NameError(f"Cannot resolve type {self}, TODO context")

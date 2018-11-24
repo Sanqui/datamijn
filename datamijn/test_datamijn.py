@@ -62,8 +62,6 @@ def test_array():
     for byte, real in zip(result.bytes, nums):
         assert byte == real
 
-
-
 def test_nested_array():
     dm = """bytes   [2][2][2]u8"""
     
@@ -703,7 +701,21 @@ def test_type_name_error():
     
     with pytest.raises(NameError):
         result = datamijn.parse(dm, b"")
-    
+
+def test_resolve_parent_type():
+    dm = """
+object1 {
+    :TestA {
+        foo     u8
+    }
+
+    object2 {
+        x    TestA
+    }
+}
+"""
+    result = datamijn.parse(dm, b("aa"))
+    assert result.object1.object2.x.foo == 0xaa
 
 def test_include(tmpdir):
     tmpdir.join("color.dm").write("""
@@ -714,8 +726,11 @@ def test_include(tmpdir):
     :Blue
 }
 """)
-    tmpdir.join("test.dm").write("""
+    tmpdir.join("double.dm").write("""
 !import color
+""")
+    tmpdir.join("test.dm").write("""
+!import double
 
 color0      Color
 color1      Color
