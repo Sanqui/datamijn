@@ -49,6 +49,7 @@ type: typename               -> type_typename
     | type match             -> type_match
     | type "char" match      -> type_char_match
     | type "|" type          -> type_pipe
+    | type "->" field_name   -> type_foreign_key
 
 pointer: /@[^ ]*/
 // "@" expr    

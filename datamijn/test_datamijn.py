@@ -592,6 +592,31 @@ pos1        = _pos
     assert result.short == 0xaaaa
     assert result.pos1 == 2
 
+def test_foreign_key():
+    dm = """
+things      [4]{
+    x   u8
+    y   u8
+}
+
+thing   u8 -> things
+"""
+    result = datamijn.parse(dm, b("0001 1011 2021 3031  02"))
+    
+    assert result.thing.x == 0x20
+    assert result.thing.y == 0x21
+
+def test_foreign_key_error():
+    dm = """
+things      [4]{
+    x   u8
+}
+
+thing   u8 -> things
+"""
+    with pytest.raises(IndexError):
+        result = datamijn.parse(dm, b("0001 1011 2021 3031  05"))
+
 '''
 
 def test_eval_enum_access():

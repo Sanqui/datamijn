@@ -176,7 +176,10 @@ class U8(Primitive, int):
     
     def __str__(self):
         string = str(int(self))
-        return f"{self.__class__.__name__}({string})"
+        if self.__class__.__name__ != "U8":
+            return f"{self.__class__.__name__}({string})"
+        else:
+            return string
 
 class U16(Primitive, int):
     @classmethod
@@ -516,11 +519,45 @@ class Pipe(Primitive):
         if not pipe_stream.empty:
             raise ValueError("Unaccounted data remaining in pipe.  TODO this should be suppressable")
         return result
-
+        
 def make_pipe(left_type, right_type):
     return type(f"{left_type.__name__}Pipe{right_type.__name__}", (Pipe,), {
         "_left_type": left_type,
         "_right_type": right_type})
+
+class ForeignKey(Primitive):
+    # _type
+    # field_name
+    def __init__(self, result, foreign):
+        self._result = result
+        self._foreign = foreign
+    
+    @classmethod
+    def resolve(self, ctx):
+        self._type = self._type.resolve(ctx)
+        
+        return self
+    
+    @classmethod
+    def parse_stream(self, stream, ctx):
+        result = self._type.parse_stream(stream, ctx)
+        
+        foreign = ctx[0][self._field_name]
+        
+        return self(result, foreign)
+    
+    def __getattr__(self, attr):
+        try:
+            val = self._foreign[self._result]
+        except IndexError:
+            raise IndexError(f"Indexing foreign list `{self._field_name}[{self._result}]` failed")
+        
+        return getattr(val, attr)
+
+def make_foreign_key(type_, field_name):
+    return type(f"{type_.__name__}ForeignKey", (ForeignKey,), {
+        "_type": type_,
+        "_field_name": field_name})
 
 class ForeignListAssignment():
     def __init__(self, name):
@@ -641,6 +678,9 @@ class TreeToStruct(Transformer):
     
     def type_pipe(self, tree):
         return make_pipe(*tree)
+    
+    def type_foreign_key(self, tree):
+        return make_foreign_key(*tree)
     
     def type_match(self, tree):
         type = tree[0]
