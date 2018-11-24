@@ -388,12 +388,14 @@ class LazyType(str):
         if not found:
             raise NameError(f"Cannot resolve type {self}, TODO context")
 
-def eval_with_ctx(expr, ctx):
+def eval_with_ctx(expr, ctx, extra_ctx=None):
     if len(ctx):
         context = {**(ctx[-1]), '_root': ctx[0]}
     else:
         context = {'_root': None}
     context['_terminator'] = Terminator() # XXX ?!
+    if extra_ctx:
+        context.update(extra_ctx)
     
     return whack__val_from(eval(expr, context))
 
@@ -405,9 +407,11 @@ class Computed(Primitive):
 
     @classmethod
     def parse_stream(self, stream, ctx, index=None):
-        ctx[-1]['_pos'] = stream.tell()
-        ctx[-1]['_i'] = index
-        result = eval_with_ctx(self._expr, ctx)
+        extra_ctx = {
+            '_pos': stream.tell(),
+            '_i': index
+        }
+        result = eval_with_ctx(self._expr, ctx, extra_ctx)
         if not isinstance(result, VoidType):
             result = type(f'Computed_{type(result).__name__}', (type(result),), {
                 '_type': type(result),
@@ -557,6 +561,9 @@ class ForeignKey(Primitive):
             raise IndexError(f"Indexing foreign list `{self._field_name}[{self._result}]` failed")
         
         return getattr(val, attr)
+    
+    def __repr__(self):
+        return f"{type(self).__name__}({repr(self._result)}, {repr(self._field_name)})"
 
 def make_foreign_key(type_, field_name):
     return type(f"{type_.__name__}ForeignKey", (ForeignKey,), {
