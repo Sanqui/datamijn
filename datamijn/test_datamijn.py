@@ -203,8 +203,18 @@ test        u8 match {
     result = datamijn.parse(db, b("02"))
     assert result.test._typename == "Two"
 
+def test_match_default():
+    db = """
+test        u8 match {
+    0 => :Zero
+    1 => :One
+    _ => :Unknown
+}"""
+    result = datamijn.parse(db, b("fe"))
+    assert result.test._typename == "Unknown"
 
-def test_mafch_missing():
+
+def test_match_missing():
     db = """
 test       [2] u8 match {
     0 => :Zero

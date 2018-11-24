@@ -459,8 +459,11 @@ class MatchType(Primitive, metaclass=MatchTypeMetaclass):
         if value in self._match:
             return self._match[value].parse_stream(stream, ctx)
         else:
-            # XXX improve this error
-            raise KeyError(f"Parsed value {value}, but not present in match.")
+            if DefaultKey in self._match:
+                return self._match[DefaultKey].parse_stream(stream, ctx)
+            else:
+                # XXX improve this error
+                raise KeyError(f"Parsed value {value}, but not present in match.")
     
 
 def make_type_match(type_, match, char=False):
@@ -522,6 +525,8 @@ def make_pipe(left_type, right_type):
 class ForeignListAssignment():
     def __init__(self, name):
         self.name = name
+    
+class DefaultKey(): pass
 
 primitive_types = {
     "b1": B1,
@@ -581,6 +586,9 @@ class TreeToStruct(Transformer):
     
     def match_key_string(self, tree):
         return str(tree[0])
+    
+    def match_key_default(self, tree):
+        return DefaultKey
     
     def match_field(self, tree):
         if len(tree) == 1:

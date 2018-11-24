@@ -25,6 +25,7 @@ ctx_name: NAME             -> ctx_name
 
 match_key: expr "=>"       -> match_key_int
     | string "=>"          -> match_key_string
+    | "_" "=>"             -> match_key_default
 
 stringtype: string         -> stringtype
 
