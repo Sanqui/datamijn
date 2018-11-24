@@ -5,7 +5,7 @@ from datamijn import datamijn
 
 from codecs import decode
 def b(string):
-    return decode(string, 'hex')
+    return decode(string.replace(" ", ""), 'hex')
 
 @pytest.mark.parametrize("type,data,value", [
     ("u8",  b('01'), 1),
@@ -529,7 +529,49 @@ unknown.x     u8
 """
     with pytest.raises(NameError):
         result = datamijn.parse(dm, b("01"))
+
+def test_foreign_list_assignment():
+    dm = """
+stuff [4]{
+    a   u8
+    b   u8
+    c   u8
+}
+stuff[].d   [4]u8
+"""
+    result = datamijn.parse(dm, b("0a0b0c 1a1b1c 2a2b2c 3a3b3c 0d1d2d3d"))
+    assert result.stuff[0].a == 0x0a
+    assert result.stuff[0].d == 0x0d
+    assert result.stuff[3].a == 0x3a
+    assert result.stuff[3].d == 0x3d
     
+def test_foreign_list_assignment_errors():
+    dm = """
+stuff {
+    a       u8
+}
+stuff[].b   [4]u8
+"""
+    with pytest.raises(TypeError):
+        result = datamijn.parse(dm, b("00"*100))
+    
+    dm = """
+stuff [4] {
+    a       u8
+}
+stuff[].b   u8
+"""
+    with pytest.raises(TypeError):
+        result = datamijn.parse(dm, b("00"*100))
+    
+    dm = """
+stuff [5] {
+    a       u8
+}
+stuff[].b   [4]u8
+"""
+    with pytest.raises(TypeError):
+        result = datamijn.parse(dm, b("00"*100))
 
 '''
 def test_pos():

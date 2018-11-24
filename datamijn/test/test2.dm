@@ -39,4 +39,9 @@ struct          {
 
 struct.x        u8
 
+some_array  [10] {
+}
+
+some_array[].x  [10]u8
+
 

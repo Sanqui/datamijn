@@ -304,9 +304,26 @@ class Container(dict, Primitive):
         while isinstance(key, tuple) and len(key) == 1:
             key = key[0]
         if isinstance(key, tuple):
-            if key[0] not in self:
-                raise NameError(f"`{key[0]}` not in context")
-            self[key[0]][key[1:]] = value
+            if isinstance(key[0], ForeignListAssignment):
+                key_name = key[0].name
+                is_list = True
+            else:
+                key_name = key[0]
+                is_list = False
+            if key_name not in self:
+                raise NameError(f"`{key_name}` not in context")
+            if is_list:
+                if not isinstance(self[key_name], list):
+                    raise TypeError(f"Attempting foreign list assignment to a non-list `{key_name}`")
+                elif not isinstance(value, list):
+                    raise TypeError(f"Attempting foreign list assignment to `{key_name}` with a non-list")
+                elif len(self[key_name]) != len(value):
+                    raise TypeError(f"Attempting foreign list assignment to `{key_name}` with a list of a different length")
+                else:
+                    for i in range(len(value)):
+                        self[key_name][i][key[1:]] = value[i]
+            else:
+                self[key[0]][key[1:]] = value
         else:
             super().__setitem__(key, value)
         
@@ -487,6 +504,10 @@ def make_pipe(left_type, right_type):
         "_left_type": left_type,
         "_right_type": right_type})
 
+class ForeignListAssignment():
+    def __init__(self, name):
+        self.name = name
+
 primitive_types = {
     "b1": B1,
     "u8": U8,
@@ -613,6 +634,9 @@ class TreeToStruct(Transformer):
     
     def field_name_dot(self, f):
         return (f[0], f[1])
+    
+    def field_name_array(self, f):
+        return (ForeignListAssignment(f[0]), f[1])
     
     def equ_field(self, f):
         name = f[0]
