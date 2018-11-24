@@ -74,7 +74,7 @@ class Primitive():
         self._data = data
     
     @classmethod
-    def parse_stream(self, stream, ctx):
+    def parse_stream(self, stream, ctx, index=None):
         raise NotImplementedError()
     
     @classmethod
@@ -103,7 +103,7 @@ class VoidType(Primitive):
         return self
     
     @classmethod
-    def parse_stream(self, stream, ctx):
+    def parse_stream(self, stream, ctx, index=None):
         return self()
     
     @property
@@ -128,23 +128,23 @@ class Terminator(VoidType): pass
 class Byte(Primitive, bytes):
     _char = True
     @classmethod
-    def parse_stream(self, stream, ctx):
+    def parse_stream(self, stream, ctx, index=None):
         return self(stream.read(1))
 
 class Short(Primitive, bytes):
     @classmethod
-    def parse_stream(self, stream, ctx):
+    def parse_stream(self, stream, ctx, index=None):
         return self(stream.read(2)[::-1])
 
 class Word(Primitive, bytes):
     @classmethod
-    def parse_stream(self, stream, ctx):
+    def parse_stream(self, stream, ctx, index=None):
         return self(stream.read(4)[::-1])
 
 class B1(Primitive, int):
     _num_bits = 1
     @classmethod
-    def parse_stream(self, stream, ctx):
+    def parse_stream(self, stream, ctx, index=None):
         value = stream.read_bits(self._num_bits)
         #return self(value=value, data=data)
         obj = int.__new__(self, value)
@@ -161,7 +161,7 @@ def make_bit_type(num_bits):
 
 class U8(Primitive, int):
     @classmethod
-    def parse_stream(self, stream, ctx):
+    def parse_stream(self, stream, ctx, index=None):
         address = stream.tell()
         length = 1
         data = stream.read(1)
@@ -183,7 +183,7 @@ class U8(Primitive, int):
 
 class U16(Primitive, int):
     @classmethod
-    def parse_stream(self, stream, ctx):
+    def parse_stream(self, stream, ctx, index=None):
         address = stream.tell()
         length = 2
         data = stream.read(2)
@@ -201,7 +201,7 @@ class U32(Primitive):
 
 class Array(list, Primitive):
     @classmethod
-    def parse_stream(self, stream, ctx):
+    def parse_stream(self, stream, ctx, index=None):
         contents = []
         if callable(self._length):
             length = self._length(ctx[-1])
@@ -211,7 +211,7 @@ class Array(list, Primitive):
         
         i = 0
         while True:
-            item = self._type.parse_stream(stream, ctx)
+            item = self._type.parse_stream(stream, ctx, index=i)
             if self._type._char and len(contents) and (
                  (isinstance(item, str)   and isinstance(contents[-1], str))
               or (isinstance(item, bytes) and isinstance(contents[-1], bytes))):
@@ -276,13 +276,13 @@ def make_array(type_, length):
 
 class Container(dict, Primitive):
     @classmethod
-    def parse_stream(self, stream, ctx=None):
+    def parse_stream(self, stream, ctx=None, index=None):
         if not ctx: ctx = []
         obj = self()
         ctx.append(obj)
         obj._ctx = ctx
         for name, type_ in self._contents.items():
-            obj[name] = type_.parse_stream(stream, ctx)
+            obj[name] = type_.parse_stream(stream, ctx, index=index)
         
         if self._computed_value:
             computed_value = self._computed_value.parse_stream(stream, ctx)
@@ -404,8 +404,9 @@ class Computed(Primitive):
         return self
 
     @classmethod
-    def parse_stream(self, stream, ctx):
+    def parse_stream(self, stream, ctx, index=None):
         ctx[-1]['_pos'] = stream.tell()
+        ctx[-1]['_i'] = index
         result = eval_with_ctx(self._expr, ctx)
         if not isinstance(result, VoidType):
             result = type(f'Computed_{type(result).__name__}', (type(result),), {
@@ -425,7 +426,7 @@ class Pointer(Primitive):
         self.inner = self.inner.resolve(ctx)
         return self
     
-    def parse_stream(self, stream, ctx):
+    def parse_stream(self, stream, ctx, index=None):
         address = eval_with_ctx(self.address_expr, ctx)
         pos = stream.tell()
         stream.seek(address)
@@ -440,7 +441,7 @@ class StringType(Primitive):
     def resolve(self, ctx):
         return self
 
-    def parse_stream(self, stream, ctx):
+    def parse_stream(self, stream, ctx, index=None):
         return self.string
 
 class MatchTypeMetaclass(type):
@@ -459,7 +460,7 @@ class MatchType(Primitive, metaclass=MatchTypeMetaclass):
         return self
     
     @classmethod
-    def parse_stream(self, stream, ctx):
+    def parse_stream(self, stream, ctx, index=None):
         value = self._type.parse_stream(stream, ctx)
         
         if value in self._match:
@@ -516,7 +517,7 @@ class Pipe(Primitive):
         return self
     
     @classmethod
-    def parse_stream(self, stream, ctx):
+    def parse_stream(self, stream, ctx, index=None):
         pipe_stream = PipeStream(stream, ctx, self._left_type)
         result = self._right_type.parse_stream(pipe_stream, ctx)
         if not pipe_stream.empty:
@@ -531,9 +532,9 @@ def make_pipe(left_type, right_type):
 class ForeignKey(Primitive):
     # _type
     # field_name
-    def __init__(self, result, foreign):
+    def __init__(self, result, ctx):
         self._result = result
-        self._foreign = foreign
+        self._ctx = ctx
     
     @classmethod
     def resolve(self, ctx):
@@ -542,20 +543,19 @@ class ForeignKey(Primitive):
         return self
     
     @classmethod
-    def parse_stream(self, stream, ctx):
+    def parse_stream(self, stream, ctx, index=None):
         result = self._type.parse_stream(stream, ctx)
         
-        foreign = ctx[0][self._field_name]
-        
-        try:
-            val = foreign[result]
-        except IndexError:
-            raise IndexError(f"Indexing foreign list `{self._field_name}[{result}]` failed")
-        
-        return self(result, foreign)
+        return self(result, ctx[0])
     
     def __getattr__(self, attr):
-        val = self._foreign[self._result]
+        foreign = self._ctx[self._field_name]
+        
+        try:
+            val = foreign[self._result]
+        except IndexError:
+            raise IndexError(f"Indexing foreign list `{self._field_name}[{self._result}]` failed")
+        
         return getattr(val, attr)
 
 def make_foreign_key(type_, field_name):

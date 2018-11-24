@@ -613,7 +613,7 @@ things      [4]{
     y   u8
 }
 
-thing   (= 2) -> things
+thing   {= 2} -> things
 """
     result = datamijn.parse(dm, b("0001 1011 2021 3031"))
     assert result.thing.x == 0x20
@@ -628,7 +628,9 @@ things      [4]{
 thing   u8 -> things
 """
     with pytest.raises(IndexError):
-        result = datamijn.parse(dm, b("0001 1011 2021 3031  05"))
+        result = datamijn.parse(dm, b("00 11 21 31  05"))
+        # a second resolve pass would catch this earlier
+        result.thing.x
 
 '''
 
@@ -648,16 +650,19 @@ _start {
     assert result.fruit == result._structs.FRUIT.BANANA
     assert result.fruit == "BANANA"
     assert result.fruit == 2
+'''
 
 def test_index():
     dm = """
 dummy_array  [4] {
-    index       = _index
+    index       = _i
 }
 """
     result = datamijn.parse(dm, b"")
     for i in range(4):
         assert result.dummy_array[i].index == i
+
+'''
 
 def test_nested_index():
     dm = """

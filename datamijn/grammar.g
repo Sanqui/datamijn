@@ -20,7 +20,7 @@ string: STRING_DBL -> string
 expr: EXPR -> eval
 
 ctx_expr: /=(.+)/          -> ctx_expr
-ctx_expr_par: /\(=([^\)]+)\)/      -> ctx_expr_par
+ctx_expr_par: /{=([^}]+)}/      -> ctx_expr_par
 
 ctx_name: NAME             -> ctx_name
 
