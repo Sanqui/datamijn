@@ -74,6 +74,7 @@ field: field_name ctx_expr _NL+           -> equ_field
      | typedef _NL+                 -> typedef_field
      | /\!if ([^\{]+)/ container ("!else" container)? _NL+ -> if_field
      | /\!assert(.*)/ _NL+          -> assert_field
+     | "!save" field_name _NL+      -> save_field
 
 COMMENT: /\/\/.*/
 _NL: COMMENT? /(\r?\n[\t ]*)+/

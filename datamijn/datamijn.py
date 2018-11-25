@@ -78,7 +78,7 @@ class Primitive():
         return type(name, (self,), kwargs)
     
     @classmethod
-    def parse_stream(self, stream, ctx, index=None):
+    def parse_stream(self, stream, ctx, path, index=None):
         raise NotImplementedError()
     
     @classmethod
@@ -89,6 +89,9 @@ class Primitive():
     def resolve(self, ctx, path):
         return self
     
+    def _save(self):
+        raise NotImplementedError()
+    
     def _python_value(self):
         return self._value
     
@@ -97,6 +100,67 @@ class Primitive():
             return f"{self.__class__.__name__}({self._value})"
         else:
             return f"{self.__class__.__name__}"
+
+class Tile(Primitive):
+    width = 8
+    height = 8
+    depth = 2
+    
+    def __init__(self, tile):
+        self.tile = tile
+    
+    def _open_with_path(self, ctx, path):
+        output_dir = getattr(ctx[0], "_output_dir", None)
+        if not output_dir:
+            output_dir = ctx[0]._filepath + "/datamijn_out/"
+        filepath = output_dir + "/" + "/".join(path[:-1])
+        os.makedirs(filepath, exist_ok=True)
+        return open(filepath + f"/{path[-1]}.png", 'wb')
+
+def bits(byte):
+    return (
+        (byte     ) & 1,
+        (byte >> 1) & 1,
+        (byte >> 2) & 1,
+        (byte >> 3) & 1,
+        (byte >> 4) & 1,
+        (byte >> 5) & 1,
+        (byte >> 6) & 1,
+        (byte >> 7) & 1,
+    )
+
+class LinearTile(Tile):
+    width = 8
+    height = 8
+    depth = 2
+    
+    @classmethod
+    def parse_stream(self, stream, ctx, path, index=None):
+        tile = []
+        assert self.width == 8
+        for line in range(self.height):
+            line = [0, 0, 0, 0, 0, 0, 0, 0]
+            for d in range(self.depth):
+                layer = bits(ord(stream.read(1)))
+                for x in range(8):
+                    line[-x] |= layer[x] << d
+            tile.append(line)
+        return self(tile)
+    
+    def _save(self, ctx, path):
+        f = self._open_with_path(ctx, path)
+        w = png.Writer(self.width, self.height, greyscale=True, bitdepth=self.depth)
+        w.write(f, self.tile)
+        f.close()
+
+class Tile1BPP(LinearTile):
+    depth = 1
+
+class NESTile(LinearTile):
+    depth = 2
+
+class PlanarTile(Primitive): pass
+class GBTile(Primitive): pass
 
 class VoidType(Primitive):
     def __init__(self, self_=None):
@@ -107,7 +171,7 @@ class VoidType(Primitive):
         return self
     
     @classmethod
-    def parse_stream(self, stream, ctx, index=None):
+    def parse_stream(self, stream, ctx, path, index=None):
         return self()
     
     @property
@@ -134,29 +198,29 @@ class Null(Primitive):
         return self
     
     @classmethod
-    def parse_stream(self, stream, ctx, index=None):
+    def parse_stream(self, stream, ctx, path, index=None):
         return None
 
 class Byte(Primitive, bytes):
     _char = True
     @classmethod
-    def parse_stream(self, stream, ctx, index=None):
+    def parse_stream(self, stream, ctx, path, index=None):
         return self(stream.read(1))
 
 class Short(Primitive, bytes):
     @classmethod
-    def parse_stream(self, stream, ctx, index=None):
+    def parse_stream(self, stream, ctx, path, index=None):
         return self(stream.read(2)[::-1])
 
 class Word(Primitive, bytes):
     @classmethod
-    def parse_stream(self, stream, ctx, index=None):
+    def parse_stream(self, stream, ctx, path, index=None):
         return self(stream.read(4)[::-1])
 
 class B1(Primitive, int):
     _num_bits = 1
     @classmethod
-    def parse_stream(self, stream, ctx, index=None):
+    def parse_stream(self, stream, ctx, path, index=None):
         value = stream.read_bits(self._num_bits)
         #return self(value=value, data=data)
         obj = int.__new__(self, value)
@@ -173,7 +237,7 @@ def make_bit_type(num_bits):
 
 class U8(Primitive, int):
     @classmethod
-    def parse_stream(self, stream, ctx, index=None):
+    def parse_stream(self, stream, ctx, path, index=None):
         address = stream.tell()
         length = 1
         data = stream.read(1)
@@ -195,7 +259,7 @@ class U8(Primitive, int):
 
 class U16(Primitive, int):
     @classmethod
-    def parse_stream(self, stream, ctx, index=None):
+    def parse_stream(self, stream, ctx, path, index=None):
         address = stream.tell()
         length = 2
         data = stream.read(2)
@@ -219,7 +283,7 @@ class Array(list, Primitive):
         return self
     
     @classmethod
-    def parse_stream(self, stream, ctx, index=None):
+    def parse_stream(self, stream, ctx, path, index=None):
         contents = []
         if callable(self._length):
             length = self._length(ctx[-1])
@@ -229,7 +293,7 @@ class Array(list, Primitive):
         
         i = 0
         while True:
-            item = self._type.parse_stream(stream, ctx, index=i)
+            item = self._type.parse_stream(stream, ctx, path + [i], index=i)
             if self._type._char and len(contents) and (
                  (isinstance(item, str)   and isinstance(contents[-1], str))
               or (isinstance(item, bytes) and isinstance(contents[-1], bytes))):
@@ -285,27 +349,6 @@ class Array(list, Primitive):
 
 class Container(dict, Primitive):
     @classmethod
-    def parse_stream(self, stream, ctx=None, index=None):
-        if not ctx: ctx = []
-        obj = self()
-        ctx.append(obj)
-        obj._ctx = ctx
-        for name, type_ in self._contents.items():
-            obj[name] = type_.parse_stream(stream, ctx, index=index)
-        
-        if self._computed_value:
-            computed_value = self._computed_value.parse_stream(stream, ctx)
-            if computed_value != None:
-                for name, value in obj.items():
-                    setattr(computed_value, name, value)
-            
-            ctx.pop()
-            return computed_value
-        else:
-            ctx.pop()
-            return obj
-    
-    @classmethod
     def resolve(self, ctx=None, path=None):
         if not ctx: ctx = []
         if not path: path = []
@@ -322,12 +365,44 @@ class Container(dict, Primitive):
         
         self._types.update(new_types)
         
-        for name, type_ in self._contents.items():
-            self._contents[name] = type_.resolve(ctx, path + [name])
+        contents = []
+        
+        for name, type_ in self._contents:
+            contents.append((name, type_.resolve(ctx, path + [name])))
+        
+        self._contents = contents
         
         ctx.pop()
         
         return self
+    
+    
+    @classmethod
+    def parse_stream(self, stream, ctx=None, path=None, index=None):
+        if not ctx: ctx = []
+        if not path: path = []
+        obj = self()
+        ctx.append(obj)
+        obj._ctx = ctx
+        for name, type_ in self._contents:
+            passed_path = path[:]
+            if name:
+                passed_path += [name]
+            result = type_.parse_stream(stream, ctx, passed_path, index=index)
+            if name:
+                obj[name] = result
+        
+        if self._computed_value:
+            computed_value = self._computed_value.parse_stream(stream, ctx, path + ["_computed_value"])
+            if computed_value != None:
+                for name, value in obj.items():
+                    setattr(computed_value, name, value)
+            
+            ctx.pop()
+            return computed_value
+        else:
+            ctx.pop()
+            return obj
     
     def __setitem__(self, key, value):
         while isinstance(key, tuple) and len(key) == 1:
@@ -416,7 +491,7 @@ class Computed(Primitive):
         return self
 
     @classmethod
-    def parse_stream(self, stream, ctx, index=None):
+    def parse_stream(self, stream, ctx, path, index=None):
         extra_ctx = {
             '_pos': stream.tell(),
             '_i': index
@@ -437,11 +512,11 @@ class Pointer(Primitive):
         self.inner = self.inner.resolve(ctx, path)
         return self
     
-    def parse_stream(self, stream, ctx, index=None):
+    def parse_stream(self, stream, ctx, path, index=None):
         address = eval_with_ctx(self.address_expr, ctx)
         pos = stream.tell()
         stream.seek(address)
-        obj = self.inner.parse_stream(stream, ctx)
+        obj = self.inner.parse_stream(stream, ctx, path)
         stream.seek(pos)
         return obj
 
@@ -452,7 +527,7 @@ class StringType(Primitive):
     def resolve(self, ctx, path):
         return self
 
-    def parse_stream(self, stream, ctx, index=None):
+    def parse_stream(self, stream, ctx, path, index=None):
         return self.string
 
 class MatchTypeMetaclass(type):
@@ -461,7 +536,6 @@ class MatchTypeMetaclass(type):
             return self._match_types[name]
 
 class MatchType(Primitive, metaclass=MatchTypeMetaclass):
-    
     @classmethod
     def resolve(self, ctx, path):
         self._match_types = {v.__name__: v for k, v in self._match.items() if isinstance(v, type) and issubclass(v, Primitive)}
@@ -478,18 +552,18 @@ class MatchType(Primitive, metaclass=MatchTypeMetaclass):
         return self
     
     @classmethod
-    def parse_stream(self, stream, ctx, index=None):
-        value = self._type.parse_stream(stream, ctx)
+    def parse_stream(self, stream, ctx, path, index=None):
+        value = self._type.parse_stream(stream, ctx, path)
         
         if value in self._match:
-            return self._match[value].parse_stream(stream, ctx)
+            return self._match[value].parse_stream(stream, ctx, path + [f"[{value}]"])
         else:
             for range, rangeval in self._ranges.items():
                 if range.from_ <= value < range.to:
-                    return rangeval.parse_stream(stream, ctx)
+                    return rangeval.parse_stream(stream, ctx, path + [f"[{range}]"])
             
             if DefaultKey in self._match:
-                return self._match[DefaultKey].parse_stream(stream, ctx)
+                return self._match[DefaultKey].parse_stream(stream, ctx, path + [f"[_]"])
             else:
                 # XXX improve this error
                 raise KeyError(f"Parsed value {value}, but not present in match.")
@@ -507,7 +581,7 @@ class PipeStream(IOWithBits):
     
     def read(self, num):
         while len(self._buffer) < num:
-            result = self._type.parse_stream(self._stream, self._ctx)
+            result = self._type.parse_stream(self._stream, self._ctx, [f"({self})"]) # XXX
             if not isinstance(result, bytes):
                 raise TypeError(f"Pipe received {type(result)}.  Only bytes may be passed through a pipe.")
             self._buffer += result
@@ -534,9 +608,9 @@ class Pipe(Primitive):
         return self
     
     @classmethod
-    def parse_stream(self, stream, ctx, index=None):
+    def parse_stream(self, stream, ctx, path, index=None):
         pipe_stream = PipeStream(stream, ctx, self._left_type)
-        result = self._right_type.parse_stream(pipe_stream, ctx)
+        result = self._right_type.parse_stream(pipe_stream, ctx, path)
         if not pipe_stream.empty:
             raise ValueError("Unaccounted data remaining in pipe.  TODO this should be suppressable")
         return result
@@ -555,8 +629,8 @@ class ForeignKey(Primitive):
         return self
     
     @classmethod
-    def parse_stream(self, stream, ctx, index=None):
-        result = self._type.parse_stream(stream, ctx)
+    def parse_stream(self, stream, ctx, path, index=None):
+        result = self._type.parse_stream(stream, ctx, path)
         
         if result == None:
             return None
@@ -593,6 +667,20 @@ class KeyRange():
         else:
             return NotImplemented
 
+class Field(): pass
+
+class SaveField(Field):
+    def __init__(self, field_name):
+        self._field_name = field_name
+    
+    def resolve(self, ctx, path):
+        return self
+    
+    def parse_stream(self, stream, ctx, path, index=None):
+        foreign = ctx[-1][self._field_name]
+        foreign._save(ctx, path + [self._field_name])
+    
+
 primitive_types = {
     "b1": B1,
     "u8": U8,
@@ -602,6 +690,9 @@ primitive_types = {
     "short": Short,
     "word": Word,
     # TODO long
+    "Tile1BPP": Tile1BPP,
+    "NESTile": NESTile,
+    "GBTile": GBTile,
     "Terminator": Terminator,
     "Null": Null,
 }
@@ -703,13 +794,15 @@ class TreeToStruct(Transformer):
                 raise SyntaxError("Bare non-computed value") # TODO nicer error
             if isinstance(field, type) and issubclass(field, Primitive):
                 types[field._name] = field
+            elif isinstance(field, Field):
+                struct.append((None, field))
             elif type(field) == tuple and len(field) == 2:
                 struct.append(field)
             else:
                 print(tree)
                 raise RuntimeError(f"Internal error: unknown container field {field}")
         
-        return Container.new("Container", _contents=dict(struct), _types=types, _computed_value=computed_value)
+        return Container.new("Container", _contents=struct, _types=types, _computed_value=computed_value)
     
     def type_pipe(self, tree):
         left_type, right_type = tree
@@ -764,6 +857,11 @@ class TreeToStruct(Transformer):
         cond = self._eval_ctx(f[0][8:])
         
         raise NotImplementedError()
+    
+    def save_field(self, f):
+        field_name = f[0]
+        
+        return SaveField(field_name)
     
     def type_typename(self, f):
         return f[0]
@@ -830,6 +928,7 @@ def parse_definition(definition, name=None, embed=False):
     structs_by_name = {}
     transformer = TreeToStruct(structs_by_name, path)
     struct = transformer.transform(parser.parse(definition))
+    struct._filepath = path
     
     struct.resolve()
     if name:
@@ -839,8 +938,9 @@ def parse_definition(definition, name=None, embed=False):
     
     return struct
 
-def parse(definition, data):
+def parse(definition, data, output_dir=None):
     struct = parse_definition(definition)
+    struct._output_dir = output_dir
     
     start = struct
     

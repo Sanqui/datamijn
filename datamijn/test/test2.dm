@@ -44,3 +44,7 @@ some_array  [10] {
 
 some_array[].x  [10]u8
 
+gfx {
+    tile       @0x100  Tile1BPP
+    !save tile
+}

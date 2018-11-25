@@ -814,6 +814,15 @@ color1      Color
     assert result.color0 == result.Color.Green
     assert result.color1 == result.Color.Red
 
+def test_save_tile(tmpdir):
+    tmpdir.join("test.dm").write("""
+tile    Tile1BPP
+!save tile
+""")
+    
+    result = datamijn.parse(open(tmpdir.join("test.dm")), b('0011223344556677'), tmpdir.join("x"))
+    assert open(tmpdir.join("/x/tile.png"))
+
 
 def test_complex():
     result = datamijn.parse(open("datamijn/test/test2.dm"),
