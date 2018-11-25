@@ -453,6 +453,21 @@ string      [] Char
     assert result.string == ["BAD ", result.Char.TextSpeed(5), "CAFE ", result.Char.PlayerName, "!", result.Char.End]
     assert str(result.string) == "BAD <TextSpeed(5)>CAFE <PlayerName>!"
 
+def test_match_range():
+    dm = """
+:Thing        u8 char match {
+    0..8        => "0"
+                   "8"
+    0x80..0xff  => "Z"
+}
+
+stuff   [5]Thing
+"""
+    result = datamijn.parse(dm, b("00 07 08 05 ee"))
+    
+    assert str(result.stuff) == "0080Z"
+
+
 def test_byte():
     dm = """
 byte1    byte

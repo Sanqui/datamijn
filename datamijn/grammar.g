@@ -25,6 +25,7 @@ ctx_expr_par: /{=([^}]+)}/      -> ctx_expr_par
 ctx_name: NAME             -> ctx_name
 
 match_key: expr "=>"       -> match_key_int
+    | expr ".." expr "=>"  -> match_key_range
     | string "=>"          -> match_key_string
     | "_" "=>"             -> match_key_default
 

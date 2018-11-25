@@ -461,6 +461,12 @@ class MatchType(Primitive, metaclass=MatchTypeMetaclass):
         for key, value in self._match.items():
             self._match[key] = value.resolve(ctx)
         
+        # minor optimization
+        self._ranges = {}
+        for key, value in self._match.items():
+            if isinstance(key, KeyRange):
+                self._ranges[key] = value
+        
         return self
     
     @classmethod
@@ -470,6 +476,10 @@ class MatchType(Primitive, metaclass=MatchTypeMetaclass):
         if value in self._match:
             return self._match[value].parse_stream(stream, ctx)
         else:
+            for range, rangeval in self._ranges.items():
+                if range.from_ <= value < range.to:
+                    return rangeval.parse_stream(stream, ctx)
+            
             if DefaultKey in self._match:
                 return self._match[DefaultKey].parse_stream(stream, ctx)
             else:
@@ -576,6 +586,17 @@ class ForeignListAssignment():
     
 class DefaultKey(): pass
 
+class KeyRange():
+    def __init__(self, from_, to):
+        self.from_ = from_
+        self.to = to
+    
+    def __add__(self, other):
+        if isinstance(other, int):
+            return self.to - 1 + other
+        else:
+            return NotImplemented
+
 primitive_types = {
     "b1": B1,
     "u8": U8,
@@ -640,6 +661,9 @@ class TreeToStruct(Transformer):
     
     def match_key_default(self, tree):
         return DefaultKey
+    
+    def match_key_range(self, tree):
+        return KeyRange(*tree)
     
     def match_field(self, tree):
         if len(tree) == 1:
