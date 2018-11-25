@@ -647,6 +647,12 @@ thing   u8 -> things
         # a second resolve pass would catch this earlier
         result.thing.x
 
+def test_null():
+    dm = "x Null"
+    
+    result = datamijn.parse(dm, b(""))
+    assert result.x == None
+
 '''
 
 def test_eval_enum_access():

@@ -124,6 +124,14 @@ class VoidType(Primitive):
             return False
 
 class Terminator(VoidType): pass
+class Null(Primitive):
+    @classmethod
+    def resolve(self, ctx):
+        return self
+    
+    @classmethod
+    def parse_stream(self, stream, ctx, index=None):
+        return None
 
 class Byte(Primitive, bytes):
     _char = True
@@ -606,7 +614,8 @@ primitive_types = {
     "short": Short,
     "word": Word,
     # TODO long
-    "Terminator": Terminator
+    "Terminator": Terminator,
+    "Null": Null,
 }
 
 for i in range(2, 33):
