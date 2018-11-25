@@ -69,6 +69,7 @@ class Data():
 class Primitive():
     _char = False
     _embed = False
+    _forms = None
     def __init__(self, value=None, data=None):
         self._value = value
         self._data = data
@@ -89,7 +90,7 @@ class Primitive():
     def resolve(self, ctx, path):
         return self
     
-    def _save(self):
+    def _save(self, ctx, path):
         raise NotImplementedError()
     
     def _python_value(self):
@@ -276,11 +277,15 @@ class U32(Primitive):
     pass
 
 class Array(list, Primitive):
+    # _type
+    # _length
     @classmethod
     def resolve(self, ctx, path):
         self._type = self._type.resolve(ctx, path)
-        
-        return self
+        if issubclass(self._type, Tile):
+            return Tileset.new(f"{self._type.__name__}Tileset[{self._length}]", _type=self._type, _length=self._length)
+        else:
+            return self
     
     @classmethod
     def parse_stream(self, stream, ctx, path, index=None):
@@ -340,12 +345,16 @@ class Array(list, Primitive):
     def _python_value(self):
         return [o._python_value() for o in self]
 
-#class ContainerResult(dict):
-#    def __getattr__(self, name):
-#        if name in self:
-#            return self[name]
-#        else:
-#            raise AttributeError()
+class Tileset(Array):
+    def __str__(self):
+        return f"Tileset[{self._length}]"
+    
+    def _save(self, ctx, path):
+        f = self._type._open_with_path(self, ctx, path)
+        w = png.Writer(self._type.width, self._type.height*len(self), greyscale=True, bitdepth=self._type.depth)
+        
+        w.write(f, sum((t.tile for t in self), []))
+        f.close()
 
 class Container(dict, Primitive):
     @classmethod
@@ -462,12 +471,15 @@ class Container(dict, Primitive):
     #def __str__(self):
     #    print(f"{self.__name__}")
 
-class LazyType(str):
+class LazyType(Primitive):
+    #_type
+    
+    @classmethod
     def resolve(self, ctx, path):
         # TODO recursive context!
         for context in reversed(ctx):
-            if str(self) in context._types:
-                return context._types[str(self)].resolve(ctx, path)
+            if self._type in context._types:
+                return context._types[self._type].resolve(ctx, path)
         found = False
         if not found:
             context = ".".join(path)
@@ -776,7 +788,7 @@ class TreeToStruct(Transformer):
                 raise NotImplementedError()
                 #return BitsInteger(int(name[1]))
             else:
-                return LazyType(type_)
+                return LazyType.new(f"Lazy{type_}", _type=type_)
         else:
             raise ValueError(f"Unknown type {type_}")
             raise NotImplementedError()
@@ -875,7 +887,7 @@ class TreeToStruct(Transformer):
             count = count_tree.children[0]
         else:
             count = None
-        return Array.new(f"{type_}Array[{count if count else ''}]", _type=type_, _length=count)
+        return Array.new(f"{type_.__name__}Array[{count if count else ''}]", _type=type_, _length=count)
     
     def instance_field(self, f):
         name = f[0]
