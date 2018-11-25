@@ -74,6 +74,10 @@ class Primitive():
         self._data = data
     
     @classmethod
+    def new(self, name, **kwargs):
+        return type(name, (self,), kwargs)
+    
+    @classmethod
     def parse_stream(self, stream, ctx, index=None):
         raise NotImplementedError()
     
@@ -82,7 +86,7 @@ class Primitive():
         raise NotImplementedError()
         
     @classmethod
-    def resolve(self, ctx):
+    def resolve(self, ctx, path):
         return self
     
     def _python_value(self):
@@ -99,7 +103,7 @@ class VoidType(Primitive):
         pass
     
     @classmethod
-    def resolve(self, ctx):
+    def resolve(self, ctx, path):
         return self
     
     @classmethod
@@ -126,7 +130,7 @@ class VoidType(Primitive):
 class Terminator(VoidType): pass
 class Null(Primitive):
     @classmethod
-    def resolve(self, ctx):
+    def resolve(self, ctx, path):
         return self
     
     @classmethod
@@ -209,6 +213,12 @@ class U32(Primitive):
 
 class Array(list, Primitive):
     @classmethod
+    def resolve(self, ctx, path):
+        self._type = self._type.resolve(ctx, path)
+        
+        return self
+    
+    @classmethod
     def parse_stream(self, stream, ctx, index=None):
         contents = []
         if callable(self._length):
@@ -248,12 +258,6 @@ class Array(list, Primitive):
         else:
             return self(contents)
     
-    @classmethod
-    def resolve(self, ctx):
-        self._type = self._type.resolve(ctx)
-        
-        return self
-    
     def __str__(self):
         if self._type._char:
             string = ""
@@ -271,9 +275,6 @@ class Array(list, Primitive):
     
     def _python_value(self):
         return [o._python_value() for o in self]
-
-def make_array(type_, length):
-    return type('Array', (Array,), {'_type': type_, '_length': length})
 
 #class ContainerResult(dict):
 #    def __getattr__(self, name):
@@ -294,8 +295,9 @@ class Container(dict, Primitive):
         
         if self._computed_value:
             computed_value = self._computed_value.parse_stream(stream, ctx)
-            for name, value in obj.items():
-                setattr(computed_value, name, value)
+            if computed_value != None:
+                for name, value in obj.items():
+                    setattr(computed_value, name, value)
             
             ctx.pop()
             return computed_value
@@ -304,14 +306,15 @@ class Container(dict, Primitive):
             return obj
     
     @classmethod
-    def resolve(self, ctx=None):
+    def resolve(self, ctx=None, path=None):
         if not ctx: ctx = []
+        if not path: path = []
         ctx.append(self)
         
         new_types = {}
         
         for name, type_ in self._types.items():
-            resolved = type_.resolve(ctx)
+            resolved = type_.resolve(ctx, path + [name])
             if resolved._embed:
                 new_types.update(resolved._types)
             else:
@@ -320,7 +323,9 @@ class Container(dict, Primitive):
         self._types.update(new_types)
         
         for name, type_ in self._contents.items():
-            self._contents[name] = type_.resolve(ctx)
+            self._contents[name] = type_.resolve(ctx, path + [name])
+        
+        ctx.pop()
         
         return self
     
@@ -382,19 +387,16 @@ class Container(dict, Primitive):
     #def __str__(self):
     #    print(f"{self.__name__}")
 
-def make_container(struct, types=None, computed_value=None):
-    if not types: types = {}
-    return type('Container', (Container,), {'_contents': struct, '_types': types, '_computed_value': computed_value})
-
 class LazyType(str):
-    def resolve(self, ctx):
+    def resolve(self, ctx, path):
         # TODO recursive context!
         for context in reversed(ctx):
             if str(self) in context._types:
-                return context._types[str(self)].resolve(ctx)
+                return context._types[str(self)].resolve(ctx, path)
         found = False
         if not found:
-            raise NameError(f"Cannot resolve type {self}, TODO context")
+            context = ".".join(path)
+            raise NameError(f"Cannot resolve type {self}, path: {context}")
 
 def eval_with_ctx(expr, ctx, extra_ctx=None):
     if len(ctx):
@@ -410,7 +412,7 @@ def eval_with_ctx(expr, ctx, extra_ctx=None):
 class Computed(Primitive):
     # _expr
     @classmethod
-    def resolve(self, ctx):
+    def resolve(self, ctx, path):
         return self
 
     @classmethod
@@ -420,22 +422,19 @@ class Computed(Primitive):
             '_i': index
         }
         result = eval_with_ctx(self._expr, ctx, extra_ctx)
-        if not isinstance(result, VoidType):
+        if not isinstance(result, VoidType) and result != None:
             result = type(f'Computed_{type(result).__name__}', (type(result),), {
                 '_type': type(result),
                 '_python_value': lambda self: self._type(self)})(result)
         return result
-
-def make_computed(expr):
-    return type("Computed", (Computed,), {'_expr': expr})
 
 class Pointer(Primitive):
     def __init__(self, inner, address_expr):
         self.inner = inner
         self.address_expr = address_expr
     
-    def resolve(self, ctx):
-        self.inner = self.inner.resolve(ctx)
+    def resolve(self, ctx, path):
+        self.inner = self.inner.resolve(ctx, path)
         return self
     
     def parse_stream(self, stream, ctx, index=None):
@@ -450,7 +449,7 @@ class StringType(Primitive):
     def __init__(self, string):
         self.string = string
     
-    def resolve(self, ctx):
+    def resolve(self, ctx, path):
         return self
 
     def parse_stream(self, stream, ctx, index=None):
@@ -464,10 +463,11 @@ class MatchTypeMetaclass(type):
 class MatchType(Primitive, metaclass=MatchTypeMetaclass):
     
     @classmethod
-    def resolve(self, ctx):
-        self._type = self._type.resolve(ctx)
+    def resolve(self, ctx, path):
+        self._match_types = {v.__name__: v for k, v in self._match.items() if isinstance(v, type) and issubclass(v, Primitive)}
+        self._type = self._type.resolve(ctx, path)
         for key, value in self._match.items():
-            self._match[key] = value.resolve(ctx)
+            self._match[key] = value.resolve(ctx, path + [key])
         
         # minor optimization
         self._ranges = {}
@@ -493,11 +493,6 @@ class MatchType(Primitive, metaclass=MatchTypeMetaclass):
             else:
                 # XXX improve this error
                 raise KeyError(f"Parsed value {value}, but not present in match.")
-    
-
-def make_type_match(type_, match, char=False):
-    match_types = {v.__name__: v for k, v in match.items() if isinstance(v, type) and issubclass(v, Primitive)}
-    return type('MatchType', (MatchType,), {'_type': type_, '_match': match, '_match_types': match_types, '_char': char})
 
 class PipeStream(IOWithBits):
     def __init__(self, stream, ctx, type_):
@@ -532,9 +527,9 @@ class Pipe(Primitive):
     # _left_type
     # _right_type
     @classmethod
-    def resolve(self, ctx):
-        self._left_type = self._left_type.resolve(ctx)
-        self._right_type = self._right_type.resolve(ctx)
+    def resolve(self, ctx, path):
+        self._left_type = self._left_type.resolve(ctx, path + ["(left)"])
+        self._right_type = self._right_type.resolve(ctx, path + ["(left)"])
         
         return self
     
@@ -545,11 +540,6 @@ class Pipe(Primitive):
         if not pipe_stream.empty:
             raise ValueError("Unaccounted data remaining in pipe.  TODO this should be suppressable")
         return result
-        
-def make_pipe(left_type, right_type):
-    return type(f"{left_type.__name__}Pipe{right_type.__name__}", (Pipe,), {
-        "_left_type": left_type,
-        "_right_type": right_type})
 
 class ForeignKey(Primitive):
     # _type
@@ -559,14 +549,17 @@ class ForeignKey(Primitive):
         self._ctx = ctx
     
     @classmethod
-    def resolve(self, ctx):
-        self._type = self._type.resolve(ctx)
+    def resolve(self, ctx, path):
+        self._type = self._type.resolve(ctx, path)
         
         return self
     
     @classmethod
     def parse_stream(self, stream, ctx, index=None):
         result = self._type.parse_stream(stream, ctx)
+        
+        if result == None:
+            return None
         
         return self(result, ctx[0])
     
@@ -582,11 +575,6 @@ class ForeignKey(Primitive):
     
     def __repr__(self):
         return f"{type(self).__name__}({repr(self._result)}, {repr(self._field_name)})"
-
-def make_foreign_key(type_, field_name):
-    return type(f"{type_.__name__}ForeignKey", (ForeignKey,), {
-        "_type": type_,
-        "_field_name": field_name})
 
 class ForeignListAssignment():
     def __init__(self, name):
@@ -721,27 +709,31 @@ class TreeToStruct(Transformer):
                 print(tree)
                 raise RuntimeError(f"Internal error: unknown container field {field}")
         
-        return make_container(dict(struct), types, computed_value)
+        return Container.new("Container", _contents=dict(struct), _types=types, _computed_value=computed_value)
     
     def type_pipe(self, tree):
-        return make_pipe(*tree)
+        left_type, right_type = tree
+        return Pipe.new(f"{left_type.__name__}Pipe{right_type.__name__}",
+            _left_type=left_type, _right_type=right_type)
     
     def type_foreign_key(self, tree):
-        return make_foreign_key(*tree)
+        type_, field_name = tree
+        return ForeignKey.new(f"{type_.__name__}ForeignKey",
+            _type=type_, _field_name=field_name)
     
     def type_equ(self, tree):
         value = tree[0]
-        return make_computed(value)
+        return Computed.new("Computed", _expr=value)
     
     def type_match(self, tree):
         type = tree[0]
         match = tree[1]
-        return make_type_match(type, match)
+        return MatchType.new(f"{type}Match", _type=type, _match=match, _char=False)
         
     def type_char_match(self, tree):
         type = tree[0]
         match = tree[1]
-        return make_type_match(type, match, char=True)
+        return MatchType.new(f"{type}Match", _type=type, _match=match, _char=True)
     
     def field_name(self, f):
         return str(f[0])
@@ -756,12 +748,12 @@ class TreeToStruct(Transformer):
         name = f[0]
         value = f[1]
         
-        return (name, make_computed(value))
+        return (name, Computed.new(name, _expr=value))
     
     def bare_equ_field(self, f):
         value = f[0]
         
-        return make_computed(value)
+        return Computed.new("Computed", _expr=value)
     
     def if_field(self, f):
         cond = self._eval_ctx(f[0][4:])
@@ -785,7 +777,7 @@ class TreeToStruct(Transformer):
             count = count_tree.children[0]
         else:
             count = None
-        return make_array(type_, count)
+        return Array.new(f"{type_}Array[{count if count else ''}]", _type=type_, _length=count)
     
     def instance_field(self, f):
         name = f[0]
@@ -822,12 +814,6 @@ class TreeToStruct(Transformer):
             path = self.path + "/" + path
         
         return parse_definition(open(path), name=token[0], embed=True)
-    
-    #def start(self, structs):
-    #    self.structs_by_name = dict(structs)
-    #    
-    #    result = make_container(dict(structs))
-    #    return result
         
 grammar = open(os.path.dirname(__file__)+"/grammar.g").read()
 
