@@ -54,4 +54,7 @@ inner {
 gfx {
     tiles       @0x100  [2]Tile1BPP
     !save tiles
+    
+    sanquiderp  @0x200  [0xb][0x10]GBTile
+    !save sanquiderp
 }

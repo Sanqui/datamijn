@@ -135,6 +135,7 @@ class PlanarTile(Tile):
     width = 8
     height = 8
     depth = 2
+    invert = False
     
     @classmethod
     def parse_stream(self, stream, ctx, path, index=None):
@@ -145,7 +146,9 @@ class PlanarTile(Tile):
             for d in range(self.depth):
                 layer = bits(ord(stream.read(1)))
                 for x in range(8):
-                    line[-x] |= layer[x] << d
+                    line[7-x] |= layer[x] << d
+            if self.invert:
+                line = [x ^ ((1 << self.depth) - 1) for x in line]
             tile.append(line)
         return self(tile)
     
@@ -181,6 +184,7 @@ class NESTile(PlanarCompositeTile):
 
 class GBTile(PlanarTile):
     depth = 2
+    invert = True
 
 class VoidType(Primitive):
     def __init__(self, self_=None):
@@ -301,7 +305,7 @@ class Array(list, Primitive):
     @classmethod
     def resolve(self, ctx, path):
         self._type = self._type.resolve(ctx, path)
-        if issubclass(self._type, Tile):
+        if issubclass(self._type, Tile) or issubclass(self._type, Tileset):
             return Tileset.new(f"{self._type.__name__}Tileset[{self._length}]", _type=self._type, _length=self._length)
         else:
             return self
@@ -369,11 +373,28 @@ class Tileset(Array):
         return f"Tileset[{self._length}]"
     
     def _save(self, ctx, path):
-        f = self._type._open_with_path(self, ctx, path)
-        w = png.Writer(self._type.width, self._type.height*len(self), greyscale=True, bitdepth=self._type.depth)
-        
-        w.write(f, sum((t.tile for t in self), []))
-        f.close()
+        if issubclass(self._type, Tile):
+            f = self._type._open_with_path(self, ctx, path)
+            w = png.Writer(self._type.width, self._type.height*len(self), greyscale=True, bitdepth=self._type.depth)
+            
+            w.write(f, sum((t.tile for t in self), []))
+            f.close()
+        elif issubclass(self._type, Tileset):
+            f = self._type._type._open_with_path(self, ctx, path)
+            width = self._type._type.width*len(self[0])
+            height = self._type._type.height*len(self)
+            w = png.Writer(width, height, greyscale=True, bitdepth=self._type._type.depth)
+            
+            pic = []
+            for y in range(height):
+                row = []
+                for x in range(width):
+                    row.append(self[y//8][x//8].tile[y%8][x%8])
+                pic.append(row)
+            w.write(f, pic)
+            f.close()
+        else:
+            raise NotImplementedError()
 
 class Container(dict, Primitive):
     @classmethod
@@ -1012,6 +1033,6 @@ if __name__ == "__main__":
     
     result = parse(open(STRUCTF), open(FILEF, "rb"))
     
-    #pprint(result)
-    print(yaml.dump(result._python_value()))
+    pprint(result)
+    #print(yaml.dump(result._python_value()))
     #print(yaml.dump(result))
