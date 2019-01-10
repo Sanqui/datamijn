@@ -7,6 +7,7 @@
 import sys
 import os.path
 from io import BytesIO, BufferedIOBase
+from pprint import pprint
 
 from lark import Lark, Transformer
 from lark.tree import Tree
@@ -340,10 +341,10 @@ class Array(list, Primitive):
             
             return string
         else:
-            return str(self.contents)
+            return str(self)
     
     def _python_value(self):
-        return [o._python_value() for o in self]
+        return [o._python_value() if hasattr(o, '_python_value') else o for o in self]
 
 class Tileset(Array):
     def __str__(self):
@@ -366,7 +367,7 @@ class Container(dict, Primitive):
         new_types = {}
         
         for name, type_ in self._types.items():
-            resolved = type_.resolve(ctx, path + [name])
+            resolved = type_.resolve(ctx + [new_types], path + [name])
             if resolved._embed:
                 new_types.update(resolved._types)
             else:
@@ -478,12 +479,16 @@ class LazyType(Primitive):
     def resolve(self, ctx, path):
         # TODO recursive context!
         for context in reversed(ctx):
-            if self._type in context._types:
-                return context._types[self._type].resolve(ctx, path)
+            if type(context) == dict:
+                if self._type in context:
+                    return context[self._type].resolve(ctx, path)
+            else:
+                if self._type in context._types:
+                    return context._types[self._type].resolve(ctx, path)
         found = False
         if not found:
             context = ".".join(path)
-            raise NameError(f"Cannot resolve type {self}, path: {context}")
+            raise NameError(f"Cannot resolve type {self._type}, path: {context}")
 
 def eval_with_ctx(expr, ctx, extra_ctx=None):
     if len(ctx):
@@ -936,7 +941,7 @@ class TreeToStruct(Transformer):
         if self.path:
             path = self.path + "/" + path
         
-        return parse_definition(open(path), name=token[0], embed=True)
+        return parse_definition(open(path), name=f"!imported_{token[0]}", embed=True)
         
 grammar = open(os.path.dirname(__file__)+"/grammar.g").read()
 
@@ -988,6 +993,7 @@ if __name__ == "__main__":
     FILEF = argv[2]
     
     result = parse(open(STRUCTF), open(FILEF, "rb"))
-    #print(result)
+    
+    #pprint(result)
     print(yaml.dump(result._python_value()))
     #print(yaml.dump(result))

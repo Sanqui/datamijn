@@ -801,7 +801,7 @@ object1 {
     result = datamijn.parse(dm, b("aa"))
     assert result.object1.object2.x.foo == 0xaa
 
-def test_include(tmpdir):
+def test_import(tmpdir):
     tmpdir.join("color.dm").write("""
 :Color   u8 match {
     :White
@@ -812,17 +812,21 @@ def test_include(tmpdir):
 """)
     tmpdir.join("double.dm").write("""
 !import color
+
+:ColorAlias Color
 """)
     tmpdir.join("test.dm").write("""
 !import double
 
 color0      Color
 color1      Color
+color2      ColorAlias
 """)
     
-    result = datamijn.parse(open(tmpdir.join("test.dm")), b("0201"))
+    result = datamijn.parse(open(tmpdir.join("test.dm")), b("020100"))
     assert result.color0 == result.Color.Green
     assert result.color1 == result.Color.Red
+    assert result.color2 == result.Color.White
 
 def test_save_tile(tmpdir):
     tmpdir.join("test.dm").write("""

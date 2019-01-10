@@ -1,3 +1,4 @@
+!import ascii
 
 :Coords {
     x       u8
@@ -43,6 +44,12 @@ some_array  [10] {
 }
 
 some_array[].x  [10]u8
+
+inner {
+    string          @0x30 [4]Char
+    string_end      @0x50 [] Char
+    string_endx     @0x50 [7]Char
+}
 
 gfx {
     tiles       @0x100  [2]Tile1BPP
