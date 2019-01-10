@@ -679,11 +679,16 @@ class Pipe(Primitive):
     
     @classmethod
     def parse_stream(self, stream, ctx, path, index=None):
-        pipe_stream = PipeStream(stream, ctx, self._left_type)
-        result = self._right_type.parse_stream(pipe_stream, ctx, path)
-        if not pipe_stream.empty:
-            raise ValueError("Unaccounted data remaining in pipe.  TODO this should be suppressable")
-        return result
+        if issubclass(self._right_type, ContainerPrimitive):
+            container = self._left_type.parse_stream(stream, ctx, path)
+            result = self._right_type.parse_container(container, ctx, path)
+            return result
+        else:
+            pipe_stream = PipeStream(stream, ctx, self._left_type)
+            result = self._right_type.parse_stream(pipe_stream, ctx, path)
+            if not pipe_stream.empty:
+                raise ValueError("Unaccounted data remaining in pipe.  TODO this should be suppressable")
+            return result
 
 class ForeignKey(Primitive):
     # _type
@@ -750,6 +755,25 @@ class SaveField(Field):
         foreign = ctx[-1][self._field_name]
         foreign._save(ctx, path + [self._field_name])
     
+class ContainerPrimitive(Primitive):
+    @classmethod
+    def parse_container(self, container, ctx, path, index=None):
+        raise NotImplementedError()
+
+class RGBColor(ContainerPrimitive):
+    def __init__(self, r, g, b, max):
+        self.r = r
+        self.g = g
+        self.b = b
+        self.max = max
+    
+    @classmethod
+    def parse_container(self, container, ctx, path, index=None):
+        return self(container.r, container.g, container.b, container._max)
+    
+    def __repr__(self):
+        return f"RGBColor({self.r}, {self.g}, {self.b}, max={self.max})"
+    
 
 primitive_types = {
     "b1": B1,
@@ -765,6 +789,7 @@ primitive_types = {
     "GBTile": GBTile,
     "Terminator": Terminator,
     "Null": Null,
+    "RGBColor": RGBColor,
 }
 
 for i in range(2, 33):

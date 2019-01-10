@@ -712,6 +712,26 @@ foo {
     assert result.foo.b == 0x02
     assert result.foo.c == 0x04
 
+def test_rgb_color():
+    dm = """
+:GBColor short | {
+    _max  = 31
+    r     b5
+    g     b5
+    b     b5
+    _     b1
+} | RGBColor
+:GBPalette [4]GBColor
+
+pal GBPalette
+"""
+    result = datamijn.parse(dm, b("abcdabcdabcdabcd"))
+    assert len(result.pal) == 4
+    assert result.pal[0].r == 13
+    assert result.pal[0].g == 30
+    assert result.pal[0].b == 10
+    assert result.pal[0].max == 31
+    
 '''
 
 def test_nested_index():

@@ -54,6 +54,18 @@ inner {
 gfx {
     tiles       @0x100  [2]Tile1BPP
     !save tiles
+
+
+    :GBColor short | {
+        _max  = 31
+        r     b5
+        g     b5
+        b     b5
+        _     b1
+    } | RGBColor
+    :GBPalette [4]GBColor
+    
+    pal @0 GBPalette
     
     sanquiderp  @0x200  [0xb][0x10]GBTile
     !save sanquiderp
