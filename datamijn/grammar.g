@@ -27,13 +27,17 @@ ctx_name: NAME             -> ctx_name
 match_key: expr "=>"       -> match_key_int
     | expr ".." expr "=>"  -> match_key_range
     | string "=>"          -> match_key_string
+    | NAME "=>"            -> match_key_default_name
     | "_" "=>"             -> match_key_default
 
 stringtype: string         -> stringtype
 
+match_expr: ctx_expr -> match_expr
+
 match_field: match_key? typename _NL+  -> match_field
     |        match_key? typedef  _NL+  -> match_field
     |        match_key? stringtype _NL+  -> match_field
+    |        match_key? match_expr _NL+  -> match_field
 
 match: "match" "{" _NL match_field+ "}"   -> match
 

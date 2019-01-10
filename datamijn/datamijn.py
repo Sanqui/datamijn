@@ -557,9 +557,12 @@ class MatchType(Primitive, metaclass=MatchTypeMetaclass):
         
         # minor optimization
         self._ranges = {}
+        self._default_key = None
         for key, value in self._match.items():
             if isinstance(key, KeyRange):
                 self._ranges[key] = value
+            elif isinstance(key, DefaultKey):
+                self._default_key = key
         
         return self
     
@@ -574,8 +577,11 @@ class MatchType(Primitive, metaclass=MatchTypeMetaclass):
                 if range.from_ <= value < range.to:
                     return rangeval.parse_stream(stream, ctx, path + [f"[{range}]"])
             
-            if DefaultKey in self._match:
-                return self._match[DefaultKey].parse_stream(stream, ctx, path + [f"[_]"])
+            if self._default_key != None:
+                ctx_extra = {}
+                if self._default_key:
+                    ctx_extra = {str(self._default_key): value}
+                return self._match[self._default_key].parse_stream(stream, ctx + [ctx_extra], path + [f"[_]"])
             else:
                 # XXX improve this error
                 raise KeyError(f"Parsed value {value}, but not present in match.")
@@ -666,7 +672,7 @@ class ForeignListAssignment():
     def __init__(self, name):
         self.name = name
     
-class DefaultKey(): pass
+class DefaultKey(str): pass
 
 class KeyRange():
     def __init__(self, from_, to):
@@ -760,10 +766,17 @@ class TreeToStruct(Transformer):
         return str(tree[0])
     
     def match_key_default(self, tree):
-        return DefaultKey
+        return DefaultKey()
+    
+    def match_key_default_name(self, tree):
+        return DefaultKey(tree[0])
     
     def match_key_range(self, tree):
         return KeyRange(*tree)
+        
+    def match_expr(self, tree):
+        value = tree[0]
+        return Computed.new("Computed", _expr=value)
     
     def match_field(self, tree):
         if len(tree) == 1:
