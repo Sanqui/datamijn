@@ -71,6 +71,7 @@ typedef: ":" NAME type              -> typedef
 field_name: NAME                    -> field_name
     | field_name "." field_name     -> field_name_dot
     | field_name "[]." field_name   -> field_name_array
+    | "_"                           -> field_name_underscore
 
 field: field_name ctx_expr _NL+           -> equ_field
      | ctx_expr _NL+                      -> bare_equ_field

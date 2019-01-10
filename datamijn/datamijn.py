@@ -914,6 +914,9 @@ class TreeToStruct(Transformer):
     def field_name_array(self, f):
         return (ForeignListAssignment(f[0]), f[1])
     
+    def field_name_underscore(self, f):
+        return None
+    
     def equ_field(self, f):
         name = f[0]
         value = f[1]

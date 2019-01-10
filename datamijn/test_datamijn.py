@@ -697,6 +697,21 @@ dummy_array  [4] {
     for i in range(4):
         assert result.dummy_array[i].index == i
 
+def test_underscore_name():
+    dm = """
+foo {
+    a       u8
+    _       u8
+    b       u8
+    _       u8
+    c       u8
+}
+"""
+    result = datamijn.parse(dm, b("0001020304"))
+    assert result.foo.a == 0x00
+    assert result.foo.b == 0x02
+    assert result.foo.c == 0x04
+
 '''
 
 def test_nested_index():
