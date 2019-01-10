@@ -94,7 +94,7 @@ class Primitive():
         raise NotImplementedError()
     
     def _python_value(self):
-        return self._value
+        return self._value if hasattr(self, '_value') else self
     
     def __repr__(self):
         if hasattr(self, '_value'):

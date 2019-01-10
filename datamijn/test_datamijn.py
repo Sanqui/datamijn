@@ -823,6 +823,15 @@ tile    Tile1BPP
     result = datamijn.parse(open(tmpdir.join("test.dm")), b('0011223344556677'), tmpdir.join("x"))
     assert open(tmpdir.join("/x/tile.png"))
 
+def test_save_tiles(tmpdir):
+    tmpdir.join("test.dm").write("""
+tiles    [20]Tile1BPP
+!save tiles
+""")
+    
+    result = datamijn.parse(open(tmpdir.join("test.dm")), b('0011223344556677')*20, tmpdir.join("x"))
+    assert open(tmpdir.join("/x/tiles.png"))
+
 
 def test_complex():
     result = datamijn.parse(open("datamijn/test/test2.dm"),

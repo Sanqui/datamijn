@@ -69,12 +69,12 @@ field_name: NAME                    -> field_name
     | field_name "[]." field_name   -> field_name_array
 
 field: field_name ctx_expr _NL+           -> equ_field
-     | ctx_expr _NL+                -> bare_equ_field
+     | ctx_expr _NL+                      -> bare_equ_field
      | field_name field_params type _NL+  -> instance_field
-     | typedef _NL+                 -> typedef_field
+     | typedef _NL+                       -> typedef_field
      | /\!if ([^\{]+)/ container ("!else" container)? _NL+ -> if_field
-     | /\!assert(.*)/ _NL+          -> assert_field
-     | "!save" field_name _NL+      -> save_field
+     | /\!assert(.*)/ _NL+                -> assert_field
+     | "!save" field_name _NL+            -> save_field
 
 COMMENT: /\/\/.*/
 _NL: COMMENT? /(\r?\n[\t ]*)+/
