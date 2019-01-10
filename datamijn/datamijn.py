@@ -115,7 +115,7 @@ class Tile(Primitive):
         output_dir = getattr(ctx[0], "_output_dir", None)
         if not output_dir:
             output_dir = ctx[0]._filepath + "/datamijn_out/"
-        filepath = output_dir + "/" + "/".join(path[:-1])
+        filepath = output_dir.join("/".join(str(x) for x in path[:-1]))
         os.makedirs(filepath, exist_ok=True)
         return open(filepath + f"/{path[-1]}.png", 'wb')
 
@@ -305,7 +305,7 @@ class Array(list, Primitive):
     @classmethod
     def resolve(self, ctx, path):
         self._type = self._type.resolve(ctx, path)
-        if issubclass(self._type, Tile) or issubclass(self._type, Tileset):
+        if issubclass(self._type, Tile) or (issubclass(self._type, Tileset) and issubclass(self._type._type, Tile)):
             return Tileset.new(f"{self._type.__name__}Tileset[{self._length}]", _type=self._type, _length=self._length)
         else:
             return self
@@ -349,6 +349,10 @@ class Array(list, Primitive):
             return contents
         else:
             return self(contents)
+
+    def _save(self, ctx, path):
+        for i, elem in enumerate(self):
+            elem._save(ctx, path + [i])
     
     def __str__(self):
         if self._type._char:

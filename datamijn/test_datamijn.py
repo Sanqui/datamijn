@@ -851,6 +851,17 @@ tiles    [20]Tile1BPP
     assert open(tmpdir.join("/x/tiles.png"))
 
 
+def test_save_pics(tmpdir):
+    tmpdir.join("test.dm").write("""
+pics    [5][2][2]Tile1BPP
+!save pics
+""")
+    
+    result = datamijn.parse(open(tmpdir.join("test.dm")), b('0011223344556677')*20, tmpdir.join("x"))
+    for i in range(5):
+        assert open(tmpdir.join(f"/x/pics/{i}.png"))
+
+
 def test_complex():
     result = datamijn.parse(open("datamijn/test/test2.dm"),
         open("datamijn/test/test.bin", "rb"))
