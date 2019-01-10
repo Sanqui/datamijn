@@ -131,7 +131,7 @@ def bits(byte):
         (byte >> 7) & 1,
     )
 
-class LinearTile(Tile):
+class PlanarTile(Tile):
     width = 8
     height = 8
     depth = 2
@@ -155,14 +155,32 @@ class LinearTile(Tile):
         w.write(f, self.tile)
         f.close()
 
-class Tile1BPP(LinearTile):
+class PlanarCompositeTile(PlanarTile):
+    @classmethod
+    def parse_stream(self, stream, ctx, path, index=None):
+        tile = [[0]*self.width for i in range(self.height)]
+        assert self.width == 8
+        for d in range(self.depth):
+            for line in range(self.height):
+                layer = bits(ord(stream.read(1)))
+                for x in range(8):
+                    tile[line][7-x] |= layer[x] << d
+        return self(tile)
+    
+    def _save(self, ctx, path):
+        f = self._open_with_path(ctx, path)
+        w = png.Writer(self.width, self.height, greyscale=True, bitdepth=self.depth)
+        w.write(f, self.tile)
+        f.close()
+
+class Tile1BPP(PlanarTile):
     depth = 1
 
-class NESTile(LinearTile):
+class NESTile(PlanarCompositeTile):
     depth = 2
 
-class PlanarTile(Primitive): pass
-class GBTile(Primitive): pass
+class GBTile(PlanarTile):
+    depth = 2
 
 class VoidType(Primitive):
     def __init__(self, self_=None):
@@ -487,7 +505,7 @@ class LazyType(Primitive):
                     return context._types[self._type].resolve(ctx, path)
         found = False
         if not found:
-            context = ".".join(path)
+            context = ".".join(str(x) for x in path)
             raise NameError(f"Cannot resolve type {self._type}, path: {context}")
 
 def eval_with_ctx(expr, ctx, extra_ctx=None):
