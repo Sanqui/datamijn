@@ -6,6 +6,7 @@
 
 import sys
 import os.path
+from pathlib import Path
 from io import BytesIO, BufferedIOBase
 from pprint import pprint
 
@@ -115,9 +116,10 @@ class Tile(Primitive):
         output_dir = getattr(ctx[0], "_output_dir", None)
         if not output_dir:
             output_dir = ctx[0]._filepath + "/datamijn_out/"
-        filepath = output_dir.join("/".join(str(x) for x in path[:-1]))
+        output_dir = Path(output_dir)
+        filepath = output_dir / Path("/".join(str(x) for x in path[:-1]))
         os.makedirs(filepath, exist_ok=True)
-        return open(filepath + f"/{path[-1]}.png", 'wb')
+        return open(filepath / f"{path[-1]}.png", 'wb')
 
 def bits(byte):
     return (
