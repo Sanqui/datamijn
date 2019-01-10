@@ -124,10 +124,14 @@ test    {
 }
 
 bytes    [test] u8
+nested {
+    bytes2 [test]u8
+}
 """
-    result = datamijn.parse(dm, b("aabb"))
+    result = datamijn.parse(dm, b("aabbccdd"))
     assert result.test == 2
     assert result.bytes == [0xaa, 0xbb]
+    assert result.nested.bytes2 == [0xcc, 0xdd]
 
 @pytest.mark.parametrize("test_hex", [True, False])
 def test_pointer(test_hex):

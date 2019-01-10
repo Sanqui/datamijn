@@ -314,7 +314,7 @@ class Array(list, Primitive):
     def parse_stream(self, stream, ctx, path, index=None):
         contents = []
         if callable(self._length):
-            length = self._length(ctx[-1])
+            length = self._length(ctx)
         else:
             length = self._length
         length = whack__val_from(length)
@@ -531,7 +531,9 @@ class LazyType(Primitive):
 
 def eval_with_ctx(expr, ctx, extra_ctx=None):
     if len(ctx):
-        context = {**(ctx[-1]), '_root': ctx[0]}
+        context = {'_root': ctx[0]}
+        for x in ctx:
+            context.update(x)
     else:
         context = {'_root': None}
     context['_terminator'] = Terminator() # XXX ?!
@@ -799,7 +801,7 @@ class TreeToStruct(Transformer):
     
     def ctx_name(self, token):
         def ctx_name(ref):
-            return lambda this: this[ref]
+            return lambda this: eval_with_ctx(ref, this)
         
         return ctx_name(token[0].value)
     
