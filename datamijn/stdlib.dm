@@ -1,4 +1,4 @@
-:GBColor short | {
+:GBColor {
     _max  = 31
     r     b5
     g     b5
