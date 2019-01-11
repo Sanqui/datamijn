@@ -200,7 +200,7 @@ class NESTile(PlanarCompositeTile):
 
 class GBTile(PlanarTile):
     depth = 2
-    invert = True
+    invert = False
 
 class VoidType(Primitive):
     def __init__(self, self_=None):
