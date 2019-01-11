@@ -68,5 +68,6 @@ gfx {
     pal @0 GBPalette
     
     sanquiderp  @0x200  [0xb][0x10]GBTile
+    sanquiderp = sanquiderp | pal
     !save sanquiderp
 }

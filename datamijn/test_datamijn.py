@@ -714,6 +714,14 @@ foo {
 
 def test_rgb_color():
     dm = """
+:GBColor short | {
+    _max  = 31
+    r     b5
+    g     b5
+    b     b5
+    _     b1
+} | RGBColor
+:GBPalette [4]GBColor
 
 pal GBPalette
 """
@@ -881,6 +889,19 @@ tiles    [20]Tile1BPP
 def test_save_pics(tmpdir):
     tmpdir.join("test.dm").write("""
 pics    [5][2][2]Tile1BPP
+!save pics
+""")
+    
+    result = datamijn.parse(open(tmpdir.join("test.dm")), b('0011223344556677')*20, tmpdir.join("x"))
+    for i in range(5):
+        assert open(tmpdir.join(f"/x/pics/{i}.png"))
+
+def test_save_pics_equ(tmpdir):
+    tmpdir.join("test.dm").write("""
+pics    [5]{
+    pic     [2][2]Tile1BPP
+    =pic
+}
 !save pics
 """)
     

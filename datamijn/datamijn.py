@@ -72,13 +72,15 @@ class Primitive():
     _char = False
     _embed = False
     _forms = None
+    _final_type = None
+    
     def __init__(self, value=None, data=None):
         self._value = value
         self._data = data
     
     @classmethod
-    def new(self, name, **kwargs):
-        return type(name, (self,), kwargs)
+    def new(self, name, bases=[], **kwargs):
+        return type(name, (self, *bases), kwargs)
     
     @classmethod
     def parse_stream(self, stream, ctx, path, index=None):
@@ -92,6 +94,13 @@ class Primitive():
     def resolve(self, ctx, path):
         return self
     
+    @classmethod
+    def get_final_type(self):
+        if self._final_type != None:
+            return self._final_type.get_final_type()
+        else:
+            return self
+    
     def _save(self, ctx, path):
         raise NotImplementedError()
     
@@ -103,6 +112,11 @@ class Primitive():
             return f"{self.__class__.__name__}({self._value})"
         else:
             return f"{self.__class__.__name__}"
+    
+class PipedPrimitive(Primitive):
+    @classmethod
+    def parse_left(self, left, ctx, path, index=None):
+        raise NotImplementedError()
 
 class Tile(Primitive):
     width = 8
@@ -307,8 +321,11 @@ class Array(list, Primitive):
     @classmethod
     def resolve(self, ctx, path):
         self._type = self._type.resolve(ctx, path)
-        if issubclass(self._type, Tile) or (issubclass(self._type, Tileset) and issubclass(self._type._type, Tile)):
+        if issubclass(self._type.get_final_type(), Tile) \
+          or (issubclass(self._type.get_final_type(), Tileset) and issubclass(self._type._type.get_final_type(), Tile)):
             return Tileset.new(f"{self._type.__name__}Tileset[{self._length}]", _type=self._type, _length=self._length)
+        elif issubclass(self._type.get_final_type(), Color):
+            return Palette.new(f"{self._type.__name__}Palette[{self._length}]", _type=self._type, _length=self._length)
         else:
             return self
     
@@ -369,7 +386,7 @@ class Array(list, Primitive):
             
             return string
         else:
-            return str(self)
+            return repr(self)
     
     def _python_value(self):
         return [o._python_value() if hasattr(o, '_python_value') else o for o in self]
@@ -379,9 +396,12 @@ class Tileset(Array):
         return f"Tileset[{self._length}]"
     
     def _save(self, ctx, path):
+        palette = getattr(self, "_palette", None)
         if issubclass(self._type, Tile):
+            # XXX maybe remove this
             f = self._type._open_with_path(self, ctx, path)
-            w = png.Writer(self._type.width, self._type.height*len(self), greyscale=True, bitdepth=self._type.depth)
+            w = png.Writer(self._type.width, self._type.height*len(self),
+                greyscale=True, bitdepth=self._type.depth)
             
             w.write(f, sum((t.tile for t in self), []))
             f.close()
@@ -389,7 +409,12 @@ class Tileset(Array):
             f = self._type._type._open_with_path(self, ctx, path)
             width = self._type._type.width*len(self[0])
             height = self._type._type.height*len(self)
-            w = png.Writer(width, height, greyscale=True, bitdepth=self._type._type.depth)
+            if not palette:
+                w = png.Writer(width, height,
+                    greyscale=True, bitdepth=self._type._type.depth)
+            else:
+                w = png.Writer(width, height,
+                    greyscale=False, palette=palette.eightbit(), bitdepth=self._type._type.depth)
             
             pic = []
             for y in range(height):
@@ -401,6 +426,30 @@ class Tileset(Array):
             f.close()
         else:
             raise NotImplementedError()
+    
+    def __or__(self, other):
+        if isinstance(other, Palette):
+            image = Image(self)
+            image._type = self._type
+            image._palette = other
+            return image
+        else:
+            return NotImplemented
+
+class Image(Tileset):
+    pass
+
+class Palette(Array, PipedPrimitive):
+    def __str__(self):
+        return f"Palette[{self._length}]"
+    
+    def eightbit(self):
+        colors = []
+        for color in self:
+            mul = (255/color.max)
+            colors.append((int(color.r * mul), int(color.g * mul), int(color.b * mul)))
+        
+        return colors
 
 class Container(dict, Primitive):
     @classmethod
@@ -451,10 +500,12 @@ class Container(dict, Primitive):
                 obj[name] = result
         
         if self._computed_value:
-            computed_value = self._computed_value.parse_stream(stream, ctx, path + ["_computed_value"])
+            computed_value = self._computed_value.parse_stream(stream, ctx, path + ["_computed_value"], index=index)
             if computed_value != None:
-                for name, value in obj.items():
-                    setattr(computed_value, name, value)
+                pass
+                # AAAAAHHHHH WHO THOUGHT THIS WAS A GOOD IDEA
+                #for name, value in obj.items():
+                #    setattr(computed_value, name, value)
             
             ctx.pop()
             return computed_value
@@ -563,11 +614,17 @@ class Computed(Primitive):
             '_pos': stream.tell(),
             '_i': index
         }
-        result = eval_with_ctx(self._expr, ctx, extra_ctx)
+        try:
+            result = eval_with_ctx(self._expr, ctx, extra_ctx)
+        except Exception as ex:
+            pathstr = ".".join(str(x) for x in path)
+            raise type(ex)(f"{ex}\nWhile computing {pathstr}\nExpression: {self._expr}")
         if not isinstance(result, VoidType) and result != None:
-            result = type(f'Computed_{type(result).__name__}', (type(result),), {
-                '_type': type(result),
-                '_python_value': lambda self: self._type(self)})(result)
+            pass
+            #result = type(f'Computed_{type(result).__name__}', (type(result),), {
+            #    #'_type': type(result),
+            #    #'_python_value': lambda self: self._type(self)
+            #    })(result)
         return result
 
 class Pointer(Primitive):
@@ -676,15 +733,16 @@ class Pipe(Primitive):
     @classmethod
     def resolve(self, ctx, path):
         self._left_type = self._left_type.resolve(ctx, path + ["(left)"])
-        self._right_type = self._right_type.resolve(ctx, path + ["(left)"])
+        self._right_type = self._right_type.resolve(ctx, path + ["(right)"])
+        self._final_type = self._right_type
         
         return self
     
     @classmethod
     def parse_stream(self, stream, ctx, path, index=None):
-        if issubclass(self._right_type, ContainerPrimitive):
-            container = self._left_type.parse_stream(stream, ctx, path)
-            result = self._right_type.parse_container(container, ctx, path)
+        if issubclass(self._right_type, PipedPrimitive):
+            left = self._left_type.parse_stream(stream, ctx, path)
+            result = self._right_type.parse_left(left, ctx, path)
             return result
         else:
             pipe_stream = PipeStream(stream, ctx, self._left_type)
@@ -757,13 +815,10 @@ class SaveField(Field):
     def parse_stream(self, stream, ctx, path, index=None):
         foreign = ctx[-1][self._field_name]
         foreign._save(ctx, path + [self._field_name])
-    
-class ContainerPrimitive(Primitive):
-    @classmethod
-    def parse_container(self, container, ctx, path, index=None):
-        raise NotImplementedError()
 
-class RGBColor(ContainerPrimitive):
+class Color(PipedPrimitive): pass
+
+class RGBColor(Color):
     def __init__(self, r, g, b, max):
         self.r = r
         self.g = g
@@ -771,7 +826,7 @@ class RGBColor(ContainerPrimitive):
         self.max = max
     
     @classmethod
-    def parse_container(self, container, ctx, path, index=None):
+    def parse_left(self, container, ctx, path, index=None):
         return self(container.r, container.g, container.b, container._max)
     
     def __repr__(self):
