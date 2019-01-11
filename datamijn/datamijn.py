@@ -404,10 +404,13 @@ class Tileset(Array):
 
 class Container(dict, Primitive):
     @classmethod
-    def resolve(self, ctx=None, path=None):
+    def resolve(self, ctx=None, path=None, stdlib=None):
         if not ctx: ctx = []
         if not path: path = []
         ctx.append(self)
+        
+        if stdlib:
+            self._types["!stdlib"] = stdlib
         
         new_types = {}
         
@@ -1022,7 +1025,7 @@ grammar = open(os.path.dirname(__file__)+"/grammar.g").read()
 
 parser = Lark(grammar, parser='lalr')
 
-def parse_definition(definition, name=None, embed=False):
+def parse_definition(definition, name=None, embed=False, stdlib=None):
     path = ""
     if type(definition) != str:
         path = os.path.dirname(definition.name)
@@ -1035,7 +1038,7 @@ def parse_definition(definition, name=None, embed=False):
     struct = transformer.transform(parser.parse(definition))
     struct._filepath = path
     
-    struct.resolve()
+    struct.resolve(stdlib=stdlib)
     if name:
         struct._name = name
     if embed:
@@ -1044,7 +1047,8 @@ def parse_definition(definition, name=None, embed=False):
     return struct
 
 def parse(definition, data, output_dir=None):
-    struct = parse_definition(definition)
+    stdlib = parse_definition(open(os.path.dirname(__file__)+"/stdlib.dm").read(), embed=True)
+    struct = parse_definition(definition, stdlib=stdlib)
     struct._output_dir = output_dir
     
     start = struct
