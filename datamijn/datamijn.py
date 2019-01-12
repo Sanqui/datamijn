@@ -498,6 +498,8 @@ class Container(dict, Primitive):
             result = type_.parse_stream(stream, ctx, passed_path, index=index)
             if name:
                 obj[name] = result
+            elif isinstance(result, Container) and result._embed:
+                obj.update(result)
         
         if self._computed_value:
             computed_value = self._computed_value.parse_stream(stream, ctx, path + ["_computed_value"], index=index)
@@ -803,6 +805,33 @@ class KeyRange():
         else:
             return NotImplemented
 
+class If(Primitive):
+    # _computed
+    # _true_container
+    # _false_container
+    @classmethod
+    def resolve(self, ctx, path):
+        self._computed = self._computed.resolve(ctx, path)
+        self._true_container = self._true_container.resolve(ctx, path)
+        self._true_container._embed = True
+        if self._false_container:
+            self._false_container = self._false_container.resolve(ctx, path)
+            self._false_container._embed = True
+        
+        return self
+    
+    @classmethod
+    def parse_stream(self, stream, ctx, path, index=None):
+        result = self._computed.parse_stream(stream, ctx, path, index=index)
+        
+        if result:
+            return self._true_container.parse_stream(stream, ctx, path, index=index)
+        else:
+            if self._false_container:
+                return self._false_container.parse_stream(stream, ctx, path, index=index)
+            else:
+                return None
+
 class Field(): pass
 
 class SaveField(Field):
@@ -1012,9 +1041,11 @@ class TreeToStruct(Transformer):
         return Computed.new("Computed", _expr=value)
     
     def if_field(self, f):
-        cond = self._eval_ctx(f[0][4:])
+        computed = Computed.new("IfCondition", _expr=f[0][4:])
+        true_container = f[1]
+        false_container = f[2] if len(f) == 3 else []
         
-        raise NotImplementedError()
+        return (None, If.new("If", _computed=computed, _true_container=true_container, _false_container=false_container))
     
     def assert_field(self, f):
         cond = self._eval_ctx(f[0][8:])
