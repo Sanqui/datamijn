@@ -845,7 +845,10 @@ class SaveField(Field):
         foreign = ctx[-1][self._field_name]
         foreign._save(ctx, path + [self._field_name])
 
-class Color(PipedPrimitive): pass
+class Color(PipedPrimitive):
+    @property
+    def hex(self):
+        raise NotImplementedError()
 
 class RGBColor(Color):
     def __init__(self, r, g, b, max):
@@ -857,6 +860,11 @@ class RGBColor(Color):
     @classmethod
     def parse_left(self, container, ctx, path, index=None):
         return self(container.r, container.g, container.b, container._max)
+    
+    @property
+    def hex(self):
+        mul = (255/self.max)
+        return "#{:02x}{:02x}{:02x}".format(int(self.r * mul), int(self.g * mul), int(self.b * mul))
     
     def __repr__(self):
         return f"RGBColor({self.r}, {self.g}, {self.b}, max={self.max})"

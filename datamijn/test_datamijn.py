@@ -731,6 +731,7 @@ pal GBPalette
     assert result.pal[0].g == 13
     assert result.pal[0].b == 19
     assert result.pal[0].max == 31
+    assert result.pal[0].hex == "#5a6a9c"
     
 
 def test_if():
