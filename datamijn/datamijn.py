@@ -268,9 +268,9 @@ class B1(Primitive, int):
         #obj._data = data
         return obj
     
-    def __str__(self):
-        string = str(int(self))
-        return f"{self.__class__.__name__}({string})"
+    #def __str__(self):
+    #    string = str(int(self))
+    #    return f"{self.__class__.__name__}({string})"
 
 def make_bit_type(num_bits):
     return type(f"B{num_bits}", (B1,), {"_num_bits": num_bits})
@@ -332,11 +332,11 @@ class Array(list, Primitive):
     @classmethod
     def parse_stream(self, stream, ctx, path, index=None):
         contents = []
-        if callable(self._length):
-            length = self._length(ctx)
+        if isinstance(self._length, str):
+            length = eval_with_ctx(self._length, ctx)
         else:
             length = self._length
-        length = whack__val_from(length)
+        #length = whack__val_from(length)
         
         i = 0
         while True:
@@ -926,10 +926,7 @@ class TreeToStruct(Transformer):
         return self._eval_ctx(expr)
     
     def ctx_name(self, token):
-        def ctx_name(ref):
-            return lambda this: eval_with_ctx(ref, this)
-        
-        return ctx_name(token[0].value)
+        return token[0].value
     
     def match_key_int(self, tree):
         return int(tree[0])
@@ -1068,6 +1065,9 @@ class TreeToStruct(Transformer):
     def type_typename(self, f):
         return f[0]
     
+    def type_typedef(self, f):
+        return f[0]
+    
     def type_container(self, f):
         return f[0]
     
@@ -1077,7 +1077,7 @@ class TreeToStruct(Transformer):
             count = count_tree.children[0]
         else:
             count = None
-        return Array.new(f"{type_.__name__}Array[{count if count else ''}]", _type=type_, _length=count)
+        return Array.new(f"{type_.__name__}[]", _type=type_, _length=count)
     
     def instance_field(self, f):
         name = f[0]

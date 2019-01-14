@@ -50,6 +50,24 @@ value   Byte
     
     assert result.value == 1
 
+def test_type_definition():
+    dm = """
+value   [4] :Coord {
+    x   u8
+    y   u8
+}
+"""
+    result = datamijn.parse(dm, b('0001101120213031'))
+    
+    value = result.value
+    
+    assert len(value) == 4
+    assert value[0].x == 0x00
+    assert value[3].y == 0x31
+    assert type(value[0]).__name__ == "Coord"
+    assert value._type.__name__ == "Coord"
+    assert type(value).__name__ == "Coord[]"
+
 def test_array():
     dm = """bytes   [6]u8"""
     

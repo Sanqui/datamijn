@@ -51,6 +51,7 @@ typename: NAME               -> typename
 
 type: typename               -> type_typename
     | container              -> type_container
+    | typedef                -> type_typedef
     | count type             -> type_count
     | type match             -> type_match
     | type "char" match      -> type_char_match
