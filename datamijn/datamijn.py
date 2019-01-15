@@ -131,9 +131,12 @@ class Tile(Primitive):
         if not output_dir:
             output_dir = ctx[0]._filepath + "/datamijn_out/"
         output_dir = Path(output_dir)
-        filepath = output_dir / Path("/".join(str(x) for x in path[:-1]))
-        os.makedirs(filepath, exist_ok=True)
-        return open(filepath / f"{path[-1]}.png", 'wb')
+        filepath = Path("/".join(str(x) for x in path[:-1]))
+        filename = filepath / f"{path[-1]}.png"
+        full_filepath = output_dir / filepath
+        full_filename = output_dir / filename
+        os.makedirs(full_filepath, exist_ok=True)
+        return filename, open(full_filename, 'wb')
 
 def bits(byte):
     return (
@@ -169,7 +172,7 @@ class PlanarTile(Tile):
         return self(tile)
     
     def _save(self, ctx, path):
-        f = self._open_with_path(ctx, path)
+        self._filename, f = self._open_with_path(ctx, path)
         w = png.Writer(self.width, self.height, greyscale=True, bitdepth=self.depth)
         w.write(f, self.tile)
         f.close()
@@ -187,7 +190,7 @@ class PlanarCompositeTile(PlanarTile):
         return self(tile)
     
     def _save(self, ctx, path):
-        f = self._open_with_path(ctx, path)
+        self._filename, f = self._open_with_path(ctx, path)
         w = png.Writer(self.width, self.height, greyscale=True, bitdepth=self.depth)
         w.write(f, self.tile)
         f.close()
@@ -400,14 +403,14 @@ class Tileset(Array):
         palette = getattr(self, "_palette", None)
         if issubclass(self._type, Tile):
             # XXX maybe remove this
-            f = self._type._open_with_path(self, ctx, path)
+            self._filename, f = self._type._open_with_path(self, ctx, path)
             w = png.Writer(self._type.width, self._type.height*len(self),
                 greyscale=True, bitdepth=self._type.depth)
             
             w.write(f, sum((t.tile for t in self), []))
             f.close()
         elif issubclass(self._type, Tileset):
-            f = self._type._type._open_with_path(self, ctx, path)
+            self._filename, f = self._type._type._open_with_path(self, ctx, path)
             width = self._type._type.width*len(self[0])
             height = self._type._type.height*len(self)
             if not palette:
