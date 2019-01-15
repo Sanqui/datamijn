@@ -50,7 +50,7 @@ value   Byte
     
     assert result.value == 1
 
-def test_type_definition():
+def test_typedef_inline_name():
     dm = """
 value   [4] :Coord {
     x   u8

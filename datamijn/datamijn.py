@@ -327,6 +327,7 @@ class Array(list, Primitive):
         elif issubclass(self._type.get_final_type(), Color):
             return Palette.new(f"{self._type.__name__}Palette[{self._length}]", _type=self._type, _length=self._length)
         else:
+            self.__name__ = f"{self._type.__name__}[]"
             return self
     
     @classmethod
