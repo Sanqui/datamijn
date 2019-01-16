@@ -766,6 +766,8 @@ class ForeignKey(Primitive):
     
     @classmethod
     def resolve(self, ctx, path):
+        if isinstance(self._field_name, str):
+            self._field_name = (self._field_name,)
         self._type = self._type.resolve(ctx, path)
         
         self.__name__ = f"{self._type.__name__}ForeignKey"
@@ -782,12 +784,9 @@ class ForeignKey(Primitive):
     
     @property
     def _object(self):
-        if isinstance(self._field_name, tuple):
-            foreign = self._ctx
-            for segment in self._field_name:
-                foreign = foreign[segment]
-        else:
-            foreign = self._ctx[self._field_name]
+        foreign = self._ctx
+        for segment in self._field_name:
+            foreign = foreign[segment]
                 
         try:
             obj = foreign[self._result]
