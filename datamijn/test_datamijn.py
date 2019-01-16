@@ -125,14 +125,18 @@ bytes   [count]u8
 
 def test_container_computed_value():
     dm = """
-test    {
+:Test    {
     x       u8
-    = 2
+    = x * 2
 }
+
+array   [2]Test
 """
-    result = datamijn.parse(dm, b("aa"))
+    result = datamijn.parse(dm, b("0102"))
     #assert result.test.x == 0xaa
-    assert result.test == 2
+    assert result.array[0] == 2
+    assert result.array[1] == 4
+    assert issubclass(result.array._type, int)
 
 
 def test_array_computed():

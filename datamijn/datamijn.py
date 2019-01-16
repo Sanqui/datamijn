@@ -345,6 +345,7 @@ class Array(list, Primitive):
         i = 0
         while True:
             item = self._type.parse_stream(stream, ctx, path + [i], index=i)
+            
             if self._type._char and len(contents) and (
                  (isinstance(item, str)   and isinstance(contents[-1], str))
               or (isinstance(item, bytes) and isinstance(contents[-1], bytes))):
@@ -367,6 +368,11 @@ class Array(list, Primitive):
         if self._type._char and len(contents) == 1 and (
           isinstance(contents[0], str) or isinstance(contents[0], bytes)):
             contents = contents[0]
+            
+        # XXX This sucks, but it's the price for computed values.
+        # Hopefully we can get rid of it one day
+        if issubclass(self._type, Container) and self._type._computed_value != None and len(contents) > 0:
+            self._type = type(contents[0])
         
         if type(contents) == bytes:
             return contents
