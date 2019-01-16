@@ -50,7 +50,7 @@ value   Byte
     
     assert result.value == 1
 
-def test_type_definition():
+def test_typedef_inline_name():
     dm = """
 value   [4] :Coord {
     x   u8
@@ -902,6 +902,7 @@ tile    Tile1BPP
 """)
     
     result = datamijn.parse(open(tmpdir.join("test.dm")), b('0011223344556677'), tmpdir.join("x"))
+    assert str(result.tile._filename) == "tile.png"
     assert open(tmpdir.join("/x/tile.png"))
 
 def test_save_tiles(tmpdir):
@@ -911,6 +912,7 @@ tiles    [20]Tile1BPP
 """)
     
     result = datamijn.parse(open(tmpdir.join("test.dm")), b('0011223344556677')*20, tmpdir.join("x"))
+    assert str(result.tiles._filename) == "tiles.png"
     assert open(tmpdir.join("/x/tiles.png"))
 
 
@@ -921,6 +923,8 @@ pics    [5][2][2]Tile1BPP
 """)
     
     result = datamijn.parse(open(tmpdir.join("test.dm")), b('0011223344556677')*20, tmpdir.join("x"))
+    assert str(result.pics[0]._filename) == "pics/0.png"
+    assert str(result.pics[4]._filename) == "pics/4.png"
     for i in range(5):
         assert open(tmpdir.join(f"/x/pics/{i}.png"))
 
