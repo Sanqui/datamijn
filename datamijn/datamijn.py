@@ -327,6 +327,7 @@ class Array(list, Primitive):
         elif issubclass(self._type.get_final_type(), Color):
             return Palette.new(f"{self._type.__name__}Palette[{self._length}]", _type=self._type, _length=self._length)
         else:
+            self.__name__ = f"{self._type.__name__}[]"
             return self
     
     @classmethod
@@ -778,8 +779,13 @@ class ForeignKey(Primitive):
     
     @property
     def _object(self):
-        foreign = self._ctx[self._field_name]
-        
+        if isinstance(self._field_name, tuple):
+            foreign = self._ctx
+            for segment in self._field_name:
+                foreign = foreign[segment]
+        else:
+            foreign = self._ctx[self._field_name]
+                
         try:
             obj = foreign[self._result]
         except IndexError:
@@ -1022,12 +1028,12 @@ class TreeToStruct(Transformer):
     def type_match(self, tree):
         type = tree[0]
         match = tree[1]
-        return MatchType.new(f"{type}Match", _type=type, _match=match, _char=False)
+        return MatchType.new(f"{type.__name__}Match", _type=type, _match=match, _char=False)
         
     def type_char_match(self, tree):
         type = tree[0]
         match = tree[1]
-        return MatchType.new(f"{type}Match", _type=type, _match=match, _char=True)
+        return MatchType.new(f"{type.__name__}Match", _type=type, _match=match, _char=True)
     
     def field_name(self, f):
         return str(f[0])
