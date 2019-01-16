@@ -764,6 +764,7 @@ class ForeignKey(Primitive):
     def resolve(self, ctx, path):
         self._type = self._type.resolve(ctx, path)
         
+        self.__name__ = f"{self._type.__name__}ForeignKey"
         return self
     
     @classmethod
@@ -775,15 +776,21 @@ class ForeignKey(Primitive):
         
         return self(result, ctx[0])
     
-    def __getattr__(self, attr):
+    @property
+    def _object(self):
         foreign = self._ctx[self._field_name]
         
         try:
-            val = foreign[self._result]
+            obj = foreign[self._result]
         except IndexError:
             raise IndexError(f"Indexing foreign list `{self._field_name}[{self._result}]` failed")
         
-        return getattr(val, attr)
+        return obj
+    
+    def __getattr__(self, attr):
+        obj = self._object
+        
+        return getattr(obj, attr)
     
     def __repr__(self):
         return f"{type(self).__name__}({repr(self._result)}, {repr(self._field_name)})"

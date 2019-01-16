@@ -652,6 +652,7 @@ thing   u8 -> things
     
     assert result.thing.x == 0x20
     assert result.thing.y == 0x21
+    assert result.thing._object.x == 0x20
 
 def test_foreign_key_val():
     dm = """
