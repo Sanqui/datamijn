@@ -16,11 +16,12 @@ import oyaml as yaml
 import png
 
 class IOWithBits(BufferedIOBase):
-    def read_bit(self):
-        if not hasattr(self, '_byte'):
-            self._byte = None
-            self._bit_number = None
+    def __init__(self, *args, **kvargs):
+        super().__init__(*args, **kvargs)
+        self._byte = None
+        self._bit_number = None
         
+    def read_bit(self):
         if self._byte == None:
             self._byte = ord(self.read(1))
             self._bit_number = 0
@@ -44,19 +45,9 @@ class IOWithBits(BufferedIOBase):
         return num
     
     def read(self, amount):
-        if getattr(self, '_byte', None) != None:
+        if self._byte != None:
             raise RuntimeError("Attempting to read bytes while not byte-aligned")
         return super().read(amount)
-
-def whack__val_from(obj):
-    if hasattr(obj, "_val"):
-        while hasattr(obj, "_val") and obj._val != None:
-            obj = obj._val
-        return obj
-    elif callable(obj):
-        return lambda *args, **kvargs: whack__val_from(obj(*args, **kvargs))
-    else:
-        return obj
 
 class Token(str):
     def __repr__(self):
@@ -104,12 +95,9 @@ class Primitive():
     def _save(self, ctx, path):
         raise NotImplementedError()
     
-    def _python_value(self):
-        return self._value if hasattr(self, '_value') else self
-    
     def __repr__(self):
         if hasattr(self, '_value'):
-            return f"{self.__class__.__name__}({self._value})"
+            return f"{self.__class__.__name__}({repr(self._value)})"
         else:
             return f"{self.__class__.__name__}"
     
@@ -221,10 +209,8 @@ class VoidType(Primitive):
     def _typename(self):
         return str(self.__class__.__name__)
     
-    @classmethod
-    def _python_value(self):
-        # XXX
-        return f"<{self.__name__}>"
+    def __str__(self):
+        return f"<{type(self).__name__}>"
     
     def __eq__(self, other):
         if type(self) == type(other):
@@ -270,10 +256,6 @@ class B1(Primitive, int):
         obj._value = value
         #obj._data = data
         return obj
-    
-    #def __str__(self):
-    #    string = str(int(self))
-    #    return f"{self.__class__.__name__}({string})"
 
 def make_bit_type(num_bits):
     return type(f"B{num_bits}", (B1,), {"_num_bits": num_bits})
@@ -330,7 +312,7 @@ class Array(list, Primitive):
         elif issubclass(self._type.get_final_type(), Color):
             return Palette.new(f"{self._type.__name__}Palette[{self._length}]", _type=self._type, _length=self._length)
         else:
-            self.__name__ = f"{self._type.__name__}[]"
+            self.__name__ = f"{self._type.__name__}[{self._length if isinstance(self._length, int) else ''}]"
             return self
     
     @classmethod
@@ -340,7 +322,6 @@ class Array(list, Primitive):
             length = eval_with_ctx(self._length, ctx)
         else:
             length = self._length
-        #length = whack__val_from(length)
         
         i = 0
         while True:
@@ -369,6 +350,7 @@ class Array(list, Primitive):
           isinstance(contents[0], str) or isinstance(contents[0], bytes)):
             contents = contents[0]
             
+            
         # XXX This sucks, but it's the price for computed values.
         # Hopefully we can get rid of it one day
         if issubclass(self._type, Container) and self._type._computed_value != None and len(contents) > 0:
@@ -392,19 +374,13 @@ class Array(list, Primitive):
                 elif isinstance(item, Terminator):
                     pass
                 else:
-                    string += f"<{str(item)}>"
+                    string += f"<{repr(item)}>"
             
             return string
         else:
             return repr(self)
-    
-    def _python_value(self):
-        return [o._python_value() if hasattr(o, '_python_value') else o for o in self]
 
 class Tileset(Array):
-    def __str__(self):
-        return f"Tileset[{self._length}]"
-    
     def _save(self, ctx, path):
         palette = getattr(self, "_palette", None)
         if issubclass(self._type, Tile):
@@ -445,14 +421,14 @@ class Tileset(Array):
             return image
         else:
             return NotImplemented
+    
+    def __repr__(self):
+        return f"<{type(self).__name__}>"
 
 class Image(Tileset):
     pass
 
 class Palette(Array, PipedPrimitive):
-    def __str__(self):
-        return f"Palette[{self._length}]"
-    
     def eightbit(self):
         colors = []
         for color in self:
@@ -460,6 +436,9 @@ class Palette(Array, PipedPrimitive):
             colors.append((int(color.r * mul), int(color.g * mul), int(color.b * mul)))
         
         return colors
+    
+    def __repr__(self):
+        return f"<{type(self).__name__}[{self._length}]>"
 
 class Container(dict, Primitive):
     @classmethod
@@ -551,25 +530,6 @@ class Container(dict, Primitive):
                 self[key[0]][key[1:]] = value
         else:
             super().__setitem__(key, value)
-        
-    
-    def _python_value(self):
-        out = {}
-        for struct_name, struct in self.items():
-            if hasattr(struct, "_python_value"):
-                out[str(struct_name)] = struct._python_value()
-            else:
-                out[str(struct_name)] = struct
-        
-        return out
-    
-    #def __eq__(self, other):
-    #    #if super().__eq__(other):
-    #    #    return True
-    #    elif '_val' in self and self._val == other:
-    #        return True
-    #    else:
-    #        return False
     
     def __getattr__(self, name):
         if name in self:
@@ -580,6 +540,13 @@ class Container(dict, Primitive):
             raise AttributeError()
         #return self._contents[name]
     
+    def __repr__(self):
+        out = f"{type(self).__name__}:\n"
+        for name, type_ in self._contents:
+            if isinstance(name, tuple): continue
+            if not name: continue
+            out += f"\t{name}: {repr(self[name])}\n"
+        return out
     #def __str__(self):
     #    print(f"{self.__name__}")
 
@@ -612,7 +579,7 @@ def eval_with_ctx(expr, ctx, extra_ctx=None):
     if extra_ctx:
         context.update(extra_ctx)
     
-    return whack__val_from(eval(expr, context))
+    return eval(expr, context)
 
 class Computed(Primitive):
     # _expr
@@ -633,10 +600,6 @@ class Computed(Primitive):
             raise type(ex)(f"{ex}\nWhile computing {pathstr}\nExpression: {self._expr}")
         if not isinstance(result, VoidType) and result != None:
             pass
-            #result = type(f'Computed_{type(result).__name__}', (type(result),), {
-            #    #'_type': type(result),
-            #    #'_python_value': lambda self: self._type(self)
-            #    })(result)
         return result
 
 class Pointer(Primitive):
@@ -1108,7 +1071,6 @@ class TreeToStruct(Transformer):
         field = type_
         for param in params.children:
             if param.data == "pointer":
-                #pointer = whack__val_from(self._eval_ctx(param.children[0][1:]))
                 field = Pointer(field, param.children[0][1:])
             else:
                 raise ValueError(f"Unknown param type: {param.data}")
@@ -1173,7 +1135,7 @@ def parse(definition, data, output_dir=None):
     else:
         type_ = type(data)
     
-    data = type(f"{type_.__name__}WithBits", (type_, IOWithBits), {})(data)
+    data = type(f"{type_.__name__}WithBits", (IOWithBits, type_), {})(data)
     
     result = start.parse_stream(data)
 

@@ -66,7 +66,7 @@ value   [4] :Coord {
     assert value[3].y == 0x31
     assert type(value[0]).__name__ == "Coord"
     assert value._type.__name__ == "Coord"
-    assert type(value).__name__ == "Coord[]"
+    assert type(value).__name__ == "Coord[4]"
 
 def test_array():
     dm = """bytes   [6]u8"""
