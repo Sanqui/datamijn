@@ -34,8 +34,8 @@ stringtype: string         -> stringtype
 
 match_expr: ctx_expr -> match_expr
 
-match_field: match_key? typename _NL+  -> match_field
-    |        match_key? typedef  _NL+  -> match_field
+match_field: match_key? typename   _NL+  -> match_field
+    |        match_key? typedef    _NL+  -> match_field
     |        match_key? stringtype _NL+  -> match_field
     |        match_key? match_expr _NL+  -> match_field
 
@@ -60,8 +60,6 @@ type: typename               -> type_typename
     | ctx_expr_par           -> type_equ
 
 pointer: /@[^ ]*/
-// "@" expr    
-//       | "@" ctx_name
 
 field_params:
     | pointer
