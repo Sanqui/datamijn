@@ -231,7 +231,6 @@ class Null(Primitive):
         return None
 
 class Byte(Primitive, bytes):
-    _char = True
     @classmethod
     def parse_stream(self, stream, ctx, path, index=None):
         return self(stream.read(1))
@@ -274,13 +273,6 @@ class U8(Primitive, int):
         obj._value = value
         obj._data = data
         return obj
-    
-    def __str__(self):
-        string = str(int(self))
-        if self.__class__.__name__ != "U8":
-            return f"{self.__class__.__name__}({string})"
-        else:
-            return string
 
 class U16(Primitive, int):
     @classmethod
@@ -303,17 +295,34 @@ class U32(Primitive):
 class Array(list, Primitive):
     # _type
     # _length
+    _concat = False
+    _bytestring = False
     @classmethod
     def resolve(self, ctx, path):
+        ARRAY_CLASSES = {
+            (Byte,):            ByteString,
+            (CharMatchType,):   String,
+            (Tile,):            Tileset,
+            (Tileset, Tile):    Tileset,
+            (Color,):           Palette
+        }
         self._type = self._type.resolve(ctx, path)
-        if issubclass(self._type.get_final_type(), Tile) \
-          or (issubclass(self._type.get_final_type(), Tileset) and issubclass(self._type._type.get_final_type(), Tile)):
-            return Tileset.new(f"{self._type.__name__}Tileset[{self._length}]", _type=self._type, _length=self._length)
-        elif issubclass(self._type.get_final_type(), Color):
-            return Palette.new(f"{self._type.__name__}Palette[{self._length}]", _type=self._type, _length=self._length)
-        else:
-            self.__name__ = f"{self._type.__name__}[{self._length if isinstance(self._length, int) else ''}]"
-            return self
+        
+        for elem_types, new_class in ARRAY_CLASSES.items():
+            match = False
+            cur_type = self
+            for elem_type in elem_types:
+                if issubclass(cur_type._type.get_final_type(), elem_type):
+                    cur_type = cur_type._type
+                    match = True
+                else:
+                    match = False
+            
+            if match:
+                return new_class.new(f"{self._type.__name__}{new_class.__name__}[{self._length}]", _type=self._type, _length=self._length)
+        
+        self.__name__ = f"{self._type.__name__}[{self._length if isinstance(self._length, int) else ''}]"
+        return self
     
     @classmethod
     def parse_stream(self, stream, ctx, path, index=None):
@@ -327,9 +336,9 @@ class Array(list, Primitive):
         while True:
             item = self._type.parse_stream(stream, ctx, path + [i], index=i)
             
-            if self._type._char and len(contents) and (
-                 (isinstance(item, str)   and isinstance(contents[-1], str))
-              or (isinstance(item, bytes) and isinstance(contents[-1], bytes))):
+            if self._concat and len(contents) \
+              and type(contents[-1]) == type(item) \
+              and (isinstance(item, str) or isinstance(item, bytes)):
                 contents[-1] += item
             else:
                 contents.append(item)
@@ -346,39 +355,39 @@ class Array(list, Primitive):
             #else:
             #    raise ValueError("Improper terminating condition")
         
-        if self._type._char and len(contents) == 1 and (
-          isinstance(contents[0], str) or isinstance(contents[0], bytes)):
-            contents = contents[0]
-            
-            
         # XXX This sucks, but it's the price for computed values.
         # Hopefully we can get rid of it one day
         if issubclass(self._type, Container) and self._type._computed_value != None and len(contents) > 0:
             self._type = type(contents[0])
         
-        if type(contents) == bytes:
-            return contents
+        if self._bytestring:
+            return b"".join(contents)
         else:
             return self(contents)
-
+        
     def _save(self, ctx, path):
         for i, elem in enumerate(self):
             elem._save(ctx, path + [i])
     
+class String(Array):
+    _concat = True
+    
     def __str__(self):
-        if self._type._char:
-            string = ""
-            for item in self:
-                if isinstance(item, str):
-                    string += item
-                elif isinstance(item, Terminator):
-                    pass
-                else:
-                    string += f"<{repr(item)}>"
-            
-            return string
-        else:
-            return repr(self)
+        string = ""
+        for item in self:
+            if isinstance(item, str):
+                string += item
+            elif isinstance(item, Terminator):
+                pass
+            else:
+                string += f"<{repr(item)}>"
+        
+        return string
+
+class ByteString(Array):
+    _concat = True
+    _bytestring = True
+    
 
 class Tileset(Array):
     def _save(self, ctx, path):
@@ -438,7 +447,7 @@ class Palette(Array, PipedPrimitive):
         return colors
     
     def __repr__(self):
-        return f"<{type(self).__name__}[{self._length}]>"
+        return f"<{type(self).__name__}>"
 
 class Container(dict, Primitive):
     @classmethod
@@ -538,24 +547,29 @@ class Container(dict, Primitive):
             return self._types[name]
         else:
             raise AttributeError()
-        #return self._contents[name]
     
     def __repr__(self):
-        out = f"{type(self).__name__}:\n"
+        name = type(self).__name__
+        if name == "Container":
+            name = ""
+        out = f"{name} {'{'}\n"
         for name, type_ in self._contents:
             if isinstance(name, tuple): continue
             if not name: continue
-            out += f"\t{name}: {repr(self[name])}\n"
-        return out
-    #def __str__(self):
-    #    print(f"{self.__name__}")
+            valrepr = "\n  ".join(repr(self[name]).split('\n'))
+            out += f"  {name}: {valrepr}\n"
+        out += "}"
+        
+        if len(self._contents) == 0:
+            out = out.replace("\n", "")
+        return out.strip()
 
 class LazyType(Primitive):
     #_type
     
     @classmethod
     def resolve(self, ctx, path):
-        # TODO recursive context!
+        # TODO nested types?
         for context in reversed(ctx):
             if type(context) == dict:
                 if self._type in context:
@@ -563,10 +577,9 @@ class LazyType(Primitive):
             else:
                 if self._type in context._types:
                     return context._types[self._type].resolve(ctx, path)
-        found = False
-        if not found:
-            context = ".".join(str(x) for x in path)
-            raise NameError(f"Cannot resolve type {self._type}, path: {context}")
+        
+        context = ".".join(str(x) for x in path)
+        raise NameError(f"Cannot resolve type {self._type}, path: {context}")
 
 def eval_with_ctx(expr, ctx, extra_ctx=None):
     if len(ctx):
@@ -602,6 +615,7 @@ class Computed(Primitive):
             pass
         return result
 
+# XXX this doesn't work as a class type - OK?
 class Pointer(Primitive):
     def __init__(self, inner, address_expr):
         self.inner = inner
@@ -629,6 +643,7 @@ class StringType(Primitive):
     def parse_stream(self, stream, ctx, path, index=None):
         return self.string
 
+# TODO explain why this is a thing ('cause I forgot)
 class MatchTypeMetaclass(type):
     def __getattr__(self, name):
         if name in self._match_types:
@@ -637,7 +652,8 @@ class MatchTypeMetaclass(type):
 class MatchType(Primitive, metaclass=MatchTypeMetaclass):
     @classmethod
     def resolve(self, ctx, path):
-        self._match_types = {v.__name__: v for k, v in self._match.items() if isinstance(v, type) and issubclass(v, Primitive)}
+        self._match_types = {v.__name__: v for k, v in self._match.items()
+            if isinstance(v, type) and issubclass(v, Primitive)}
         self._type = self._type.resolve(ctx, path)
         for key, value in self._match.items():
             self._match[key] = value.resolve(ctx, path + [key])
@@ -672,6 +688,9 @@ class MatchType(Primitive, metaclass=MatchTypeMetaclass):
             else:
                 # XXX improve this error
                 raise KeyError(f"Parsed value {value}, but not present in match.")
+
+class CharMatchType(MatchType):
+    pass
 
 class PipeStream(IOWithBits):
     def __init__(self, stream, ctx, type_):
@@ -768,7 +787,7 @@ class ForeignKey(Primitive):
         obj = self._object
         
         return getattr(obj, attr)
-    
+        
     def __repr__(self):
         return f"{type(self).__name__}({repr(self._result)}, {repr(self._field_name)})"
 
@@ -875,20 +894,10 @@ for i in range(2, 33):
     primitive_types[f"b{i}"] = make_bit_type(i)
 
 class TreeToStruct(Transformer):
-    def __init__(self, structs_by_name, path):
-        self.structs_by_name = structs_by_name
+    def __init__(self, path):
         self.path = path
         self.match_last = -1
         self.ifcounter = 0
-    
-    def _eval_ctx(self, expr):
-        #def _eval_ctx_func(ctx):
-        #    try:
-        #        result = eval(expr, {**self.structs_by_name, **ctx})
-        #    except Exception as ex:
-        #        raise type(ex)(f"{ex}\nPath: {ctx._path}")
-        #    return result
-        return expr
     
     def string(self, token):
         return token[0][1:-1]
@@ -902,12 +911,12 @@ class TreeToStruct(Transformer):
     def ctx_expr(self, token):
         expr = token[0][1:]
         
-        return self._eval_ctx(expr)
+        return expr
     
     def ctx_expr_par(self, token):
         expr = token[0][2:-1]
         
-        return self._eval_ctx(expr)
+        return expr
     
     def ctx_name(self, token):
         return token[0].value
@@ -947,17 +956,10 @@ class TreeToStruct(Transformer):
     
     def typename(self, token):
         type_ = token[0]
-        if isinstance(type_, str):
-            if type_ in primitive_types:
-                return primitive_types[type_]
-            elif type_ in "u1 u2 u3 u4 u5 u6 u7".split():
-                raise NotImplementedError()
-                #return BitsInteger(int(name[1]))
-            else:
-                return LazyType.new(f"Lazy{type_}", _type=type_)
+        if type_ in primitive_types:
+            return primitive_types[type_]
         else:
-            raise ValueError(f"Unknown type {type_}")
-            raise NotImplementedError()
+            return LazyType.new(f"Lazy{type_}", _type=type_)
     
     def container(self, tree):
         struct = []
@@ -971,7 +973,7 @@ class TreeToStruct(Transformer):
             if isinstance(field, type) and issubclass(field, Computed):
                 raise SyntaxError("Bare non-computed value") # TODO nicer error
             if isinstance(field, type) and issubclass(field, Primitive):
-                types[field._name] = field
+                types[field.__name__] = field
             elif isinstance(field, Field):
                 struct.append((None, field))
             elif type(field) == tuple and len(field) == 2:
@@ -999,12 +1001,12 @@ class TreeToStruct(Transformer):
     def type_match(self, tree):
         type = tree[0]
         match = tree[1]
-        return MatchType.new(f"{type.__name__}Match", _type=type, _match=match, _char=False)
+        return MatchType.new(f"{type.__name__}Match", _type=type, _match=match)
         
     def type_char_match(self, tree):
         type = tree[0]
         match = tree[1]
-        return MatchType.new(f"{type.__name__}Match", _type=type, _match=match, _char=True)
+        return CharMatchType.new(f"{type.__name__}Match", _type=type, _match=match)
     
     def field_name(self, f):
         return str(f[0])
@@ -1037,7 +1039,7 @@ class TreeToStruct(Transformer):
         return (None, If.new("If", _computed=computed, _true_container=true_container, _false_container=false_container))
     
     def assert_field(self, f):
-        cond = self._eval_ctx(f[0][8:])
+        cond = f[0][8:]
         
         raise NotImplementedError()
     
@@ -1084,12 +1086,12 @@ class TreeToStruct(Transformer):
         name = f[0].value
         type_ = f[1]
         
-        return type(name, (type_,), {"_name": name})
+        return type(name, (type_,), {})
     
     def typedefvoid(self, f):
         name = f[0].value
         
-        return type(name, (VoidType,), {"_name": name})
+        return type(name, (VoidType,), {})
     
     def import_(self, token):
         path = token[0] + ".dm"
@@ -1110,14 +1112,13 @@ def parse_definition(definition, name=None, embed=False, stdlib=None):
     
     definition += "\n"
     
-    structs_by_name = {}
-    transformer = TreeToStruct(structs_by_name, path)
+    transformer = TreeToStruct(path)
     struct = transformer.transform(parser.parse(definition))
     struct._filepath = path
     
     struct.resolve(stdlib=stdlib)
     if name:
-        struct._name = name
+        struct.__name__ = name
     if embed:
         struct._embed = embed
     
@@ -1150,6 +1151,6 @@ if __name__ == "__main__":
     
     result = parse(open(STRUCTF), open(FILEF, "rb"))
     
-    pprint(result)
+    print(result)
     #print(yaml.dump(result._python_value()))
     #print(yaml.dump(result))
