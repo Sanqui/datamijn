@@ -945,6 +945,57 @@ pics    [5]{
     for i in range(5):
         assert open(tmpdir.join(f"/x/pics/{i}.png"))
 
+def test_save_pics_paletted(tmpdir):
+    tmpdir.join("test.dm").write("""
+palettes [5][2]GBColor
+pics    [5]{
+    pic     [2][2]Tile1BPP
+    = pic | palettes[_i]
+}
+!save pics
+""")
+    
+    result = datamijn.parse(open(tmpdir.join("test.dm")), b('abcdabcd')*5 + b('0011223344556677')*20, tmpdir.join("x"))
+    for i in range(5):
+        assert open(tmpdir.join(f"/x/pics/{i}.png"))
+
+def test_save_pics_paletted_array_pipe(tmpdir):
+    tmpdir.join("test.dm").write("""
+palettes [5][2]GBColor
+pics     [5][2][2]Tile1BPP
+pics     = pics | palettes
+!save pics
+""")
+    
+    result = datamijn.parse(open(tmpdir.join("test.dm")), b('abcdabcd')*5 + b('0011223344556677')*20, tmpdir.join("x"))
+    for i in range(5):
+        assert open(tmpdir.join(f"/x/pics/{i}.png"))
+
+def test_save_pics_paletted_dict_pipe(tmpdir):
+    tmpdir.join("test.dm").write("""
+palettes {
+    foo     [2]GBColor
+    bar     [2]GBColor
+    nested {
+        baz [2]GBColor
+    }
+}
+pics     {
+    foo     [2][2]Tile1BPP
+    bar     [2][2]Tile1BPP
+    nested {
+        baz [2][2]Tile1BPP
+    }
+}
+pics     = pics | palettes
+!save pics
+""")
+    
+    result = datamijn.parse(open(tmpdir.join("test.dm")), b('abcdabcd')*3 + b('0011223344556677')*20, tmpdir.join("x"))
+    assert open(tmpdir.join(f"/x/pics/foo.png"))
+    assert open(tmpdir.join(f"/x/pics/bar.png"))
+    assert open(tmpdir.join(f"/x/pics/nested/baz.png"))
+
 
 def test_complex():
     result = datamijn.parse(open("datamijn/test/test2.dm"),

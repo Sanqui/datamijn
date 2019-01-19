@@ -364,6 +364,16 @@ class Array(list, Primitive):
             return b"".join(contents)
         else:
             return self(contents)
+    
+    def __or__(self, other):
+        if len(self) != len(other):
+            raise TypeError(f"Piped arrays must be of matching length ({len(self)} != {len(other)})")
+        
+        newlist = []
+        for item0, item1 in zip(self, other):
+            newlist.append(item0 | item1)
+        
+        return type(self)(newlist)
         
     def _save(self, ctx, path):
         for i, elem in enumerate(self):
@@ -547,6 +557,22 @@ class Container(dict, Primitive):
             return self._types[name]
         else:
             raise AttributeError()
+    
+    def __or__(self, other):
+        if not isinstance(other, Container):
+            return NotImplemented
+        if set(n for n, t in self._contents if not n.startswith("_")) != set(n for n, t in other._contents if not n.startswith("_")):
+            raise TypeError(f"Piped containers must have matching fields")
+        
+        newdict = {}
+        for key0, key1 in zip(self, other):
+            newdict[key0] = self[key0] | other[key0]
+        
+        return type(self)(newdict)
+    
+    def _save(self, ctx, path):
+        for key, value in self.items():
+            value._save(ctx, path + [key])
     
     def __repr__(self):
         name = type(self).__name__
