@@ -661,13 +661,15 @@ thing   u8 -> things
 def test_foreign_key_nested():
     dm = """
 foo {
-    things      [4]{
-        x   u8
-        y   u8
+    bar {
+        things      [4]{
+            x   u8
+            y   u8
+        }
     }
 }
 
-thing   u8 -> foo.things
+thing   u8 -> foo.bar.things
 """
     result = datamijn.parse(dm, b("0001 1011 2021 3031  02"))
     

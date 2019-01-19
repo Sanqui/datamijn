@@ -60,6 +60,7 @@ class Data():
         self.length = length
 
 class Primitive():
+    _size = None
     _char = False
     _embed = False
     _forms = None
@@ -68,6 +69,13 @@ class Primitive():
     def __init__(self, value=None, data=None):
         self._value = value
         self._data = data
+    
+    @classmethod
+    def size(self):
+        if self._size != None:
+            return int(self._size)
+        else:
+            raise NotImplementedError()
     
     @classmethod
     def new(self, name, bases=[], **kwargs):
@@ -110,6 +118,10 @@ class Tile(Primitive):
     width = 8
     height = 8
     depth = 2
+    
+    @classmethod
+    def size(self):
+        return (self.depth*self.width*self.height)//8
     
     def __init__(self, tile):
         self.tile = tile
@@ -194,6 +206,7 @@ class GBTile(PlanarTile):
     invert = False
 
 class VoidType(Primitive):
+    _size = 0
     def __init__(self, self_=None):
         pass
     
@@ -222,6 +235,7 @@ class VoidType(Primitive):
 
 class Terminator(VoidType): pass
 class Null(Primitive):
+    _size = 0
     @classmethod
     def resolve(self, ctx, path):
         return self
@@ -231,21 +245,25 @@ class Null(Primitive):
         return None
 
 class Byte(Primitive, bytes):
+    _size = 1
     @classmethod
     def parse_stream(self, stream, ctx, path, index=None):
         return self(stream.read(1))
 
 class Short(Primitive, bytes):
+    _size = 2
     @classmethod
     def parse_stream(self, stream, ctx, path, index=None):
         return self(stream.read(2)[::-1])
 
 class Word(Primitive, bytes):
+    _size = 4
     @classmethod
     def parse_stream(self, stream, ctx, path, index=None):
         return self(stream.read(4)[::-1])
 
 class B1(Primitive, int):
+    _size = 1/8
     _num_bits = 1
     @classmethod
     def parse_stream(self, stream, ctx, path, index=None):
@@ -260,6 +278,7 @@ def make_bit_type(num_bits):
     return type(f"B{num_bits}", (B1,), {"_num_bits": num_bits})
 
 class U8(Primitive, int):
+    _size = 1
     @classmethod
     def parse_stream(self, stream, ctx, path, index=None):
         address = stream.tell()
@@ -275,6 +294,7 @@ class U8(Primitive, int):
         return obj
 
 class U16(Primitive, int):
+    _size = 2
     @classmethod
     def parse_stream(self, stream, ctx, path, index=None):
         address = stream.tell()
@@ -290,6 +310,7 @@ class U16(Primitive, int):
         return obj
 
 class U32(Primitive):
+    _size = 4
     pass
 
 class Array(list, Primitive):
@@ -312,7 +333,7 @@ class Array(list, Primitive):
             match = False
             cur_type = self
             for elem_type in elem_types:
-                if issubclass(cur_type._type.get_final_type(), elem_type):
+                if issubclass(cur_type.get_final_type()._type.get_final_type(), elem_type):
                     cur_type = cur_type._type
                     match = True
                 else:
@@ -323,6 +344,13 @@ class Array(list, Primitive):
         
         self.__name__ = f"{self._type.__name__}[{self._length if isinstance(self._length, int) else ''}]"
         return self
+    
+    @classmethod
+    def size(self):
+        if isinstance(self._length, int):
+            return self._length * self._type.get_final_type().size()
+        else:
+            return None
     
     @classmethod
     def parse_stream(self, stream, ctx, path, index=None):
@@ -636,7 +664,7 @@ class Computed(Primitive):
             result = eval_with_ctx(self._expr, ctx, extra_ctx)
         except Exception as ex:
             pathstr = ".".join(str(x) for x in path)
-            raise type(ex)(f"{ex}\nWhile computing {pathstr}\nExpression: {self._expr}")
+            raise type(ex)(f"{ex}\nWhile computing {pathstr}\nExpression: {self._expr}") from None
         if not isinstance(result, VoidType) and result != None:
             pass
         return result
@@ -756,19 +784,24 @@ class Pipe(Primitive):
         self._right_type = self._right_type.resolve(ctx, path + ["(right)"])
         self._final_type = self._right_type
         
+        self.__name__ = f"{self._left_type.__name__}|{self._right_type.__name__}"
+        
         return self
     
     @classmethod
     def parse_stream(self, stream, ctx, path, index=None):
         if issubclass(self._right_type, PipedPrimitive):
+            ctx = []
             left = self._left_type.parse_stream(stream, ctx, path)
             result = self._right_type.parse_left(left, ctx, path)
             return result
         else:
+            ctx.append({'_right': self._right_type})
             pipe_stream = PipeStream(stream, ctx, self._left_type)
             result = self._right_type.parse_stream(pipe_stream, ctx, path)
             if not pipe_stream.empty:
                 raise ValueError("Unaccounted data remaining in pipe.  TODO this should be suppressable")
+            ctx.pop()
             return result
 
 class ForeignKey(Primitive):
@@ -799,12 +832,17 @@ class ForeignKey(Primitive):
     @property
     def _object(self):
         foreign = self._ctx
-        for segment in self._field_name:
-            foreign = foreign[segment]
+        key = self._field_name
+        while isinstance(key, tuple) and len(key) == 2:
+            foreign = foreign[key[0]]
+            key = key[1]
+        while isinstance(key, tuple) and len(key) == 1:
+            key = key[0]
+        foreign = foreign[key]
                 
         try:
             obj = foreign[self._result]
-        except IndexError:
+        except (IndexError, KeyError):
             raise IndexError(f"Indexing foreign list `{self._field_name}[{self._result}]` failed")
         
         return obj
@@ -1012,7 +1050,7 @@ class TreeToStruct(Transformer):
     
     def type_pipe(self, tree):
         left_type, right_type = tree
-        return Pipe.new(f"{left_type.__name__}Pipe{right_type.__name__}",
+        return Pipe.new(f"{left_type.__name__}|{right_type.__name__}",
             _left_type=left_type, _right_type=right_type)
     
     def type_foreign_key(self, tree):
