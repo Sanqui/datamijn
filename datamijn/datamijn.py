@@ -97,7 +97,7 @@ class Primitive():
     
     @classmethod
     def get_final_type(self):
-        if self._final_type != None:
+        if self._final_type != None and self._final_type != self:
             return self._final_type.get_final_type()
         else:
             return self
@@ -403,6 +403,17 @@ class Array(list, Primitive):
         else:
             return self(contents)
     
+    def __add__(self, other):
+        if not isinstance(other, Array):
+            return NotImplemented
+        # XXX well whadd'ya think, I'm matching names...
+        #if self._type.get_final_type().__name__ != other._type.get_final_type().__name__:
+        #    raise TypeError(f"Added arrays must be of matching subtype ({self._type.get_final_type().__name__} != {other._type.get_final_type().__name__})")
+
+        # just pray
+        
+        return type(self)(list(self) + list(other))
+    
     def __or__(self, other):
         if len(self) != len(other):
             raise TypeError(f"Piped arrays must be of matching length ({len(self)} != {len(other)})")
@@ -616,13 +627,21 @@ class Container(dict, Primitive):
             raise TypeError(f"Piped containers must have matching fields")
         
         newdict = {}
-        for key0, key1 in zip(self, other):
-            newdict[key0] = self[key0] | other[key0]
+        for key0 in self:
+            try:
+                newdict[key0] = self[key0] | other[key0]
+            except Exception as ex:
+                if key0.startswith("_"):
+                    newdict[key0] = None
+                else:
+                    raise type(ex)(f"{type(ex).__name__}: {ex}\nWhile piping {key0}")
         
         return type(self)(newdict)
     
     def _save(self, ctx, path):
         for key, value in self.items():
+            if key.startswith("_"):
+                continue
             value._save(ctx, path + [key])
     
     def __repr__(self):
@@ -687,7 +706,7 @@ class Computed(Primitive):
             result = eval_with_ctx(self._expr, ctx, extra_ctx)
         except Exception as ex:
             pathstr = ".".join(str(x) for x in path)
-            raise type(ex)(f"{ex}\nWhile computing {pathstr}\nExpression: {self._expr}") from None
+            raise Exception(f"{type(ex).__name__}: {ex}\nWhile computing {pathstr}\nExpression: {self._expr}")
         if not isinstance(result, VoidType) and result != None:
             pass
         return result
