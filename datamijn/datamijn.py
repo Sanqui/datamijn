@@ -555,6 +555,14 @@ class Container(dict, Primitive):
         return self
     
     @classmethod
+    def size(self):
+        size = 0
+        for name, type_ in self._contents:
+            size += type_.size()
+        
+        return size
+    
+    @classmethod
     def parse_stream(self, stream, ctx=None, path=None, index=None):
         if not ctx: ctx = []
         if not path: path = []
