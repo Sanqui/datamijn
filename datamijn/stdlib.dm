@@ -8,6 +8,13 @@
 
 :GBPalette [4]GBColor
 
+:GBPalDefault [4] {
+    r = (3-_i) * (31/3)
+    g = (3-_i) * (31/3)
+    b = (3-_i) * (31/3)
+    _max = 31
+} | RGBColor
+
 :GBBankFit {
     _right_size = _right.size()
     !if (_pos // 0x4000) != (_pos + _right_size - 1)//0x4000 {
