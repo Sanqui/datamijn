@@ -535,6 +535,17 @@ bits     byte | {
     assert result.bits.two == [1, 0]
     assert result.bits.rest == 0
 
+def test_pipebuffer():
+    dm = """
+stuff     {
+    bytes       [4]byte
+    last_byte   |@-1 byte
+    =bytes + last_byte
+} | [5]u8
+"""
+    result = datamijn.parse(dm, b("01020304"))
+    assert result.stuff == [1, 2, 3, 4, 4]
+
 def test_byte_pipe_unaccounted():
     dm = """
 bits     byte | {
