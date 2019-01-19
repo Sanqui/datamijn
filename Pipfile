@@ -9,6 +9,7 @@ construct = "*"
 pytest = "*"
 pypng = "*"
 oyaml = "*"
+profiling = "*"
 
 [dev-packages]
 

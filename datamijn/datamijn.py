@@ -6,9 +6,11 @@
 
 import sys
 import os.path
+import math
 from pathlib import Path
 from io import BytesIO, BufferedIOBase
 from pprint import pprint
+import array as pyarray
 
 from lark import Lark, Transformer
 from lark.tree import Tree
@@ -158,41 +160,45 @@ class PlanarTile(Tile):
     
     @classmethod
     def parse_stream(self, stream, ctx, path, index=None):
-        tile = []
-        assert self.width == 8
-        for line in range(self.height):
-            line = [0, 0, 0, 0, 0, 0, 0, 0]
+        #assert self.width == 8
+        tile_data = stream.read(self.depth*self.width*self.height//8)
+        tile = pyarray.array("B", [0]*8*self.width)
+        i = 0
+        for y in range(self.height):
             for d in range(self.depth):
-                layer = bits(ord(stream.read(1)))
+                layer = bits(tile_data[i])
+                i += 1
                 for x in range(8):
-                    line[7-x] |= layer[x] << d
-            if self.invert:
-                line = [x ^ ((1 << self.depth) - 1) for x in line]
-            tile.append(line)
+                    tile[y*self.width + 7-x] |= layer[x] << d
+            #if self.invert:
+            #    line = [x ^ ((1 << self.depth) - 1) for x in line]
         return self(tile)
     
     def _save(self, ctx, path):
         self._filename, f = self._open_with_path(ctx, path)
         w = png.Writer(self.width, self.height, greyscale=True, bitdepth=self.depth)
-        w.write(f, self.tile)
+        w.write_array(f, self.tile)
         f.close()
 
 class PlanarCompositeTile(PlanarTile):
     @classmethod
     def parse_stream(self, stream, ctx, path, index=None):
-        tile = [[0]*self.width for i in range(self.height)]
-        assert self.width == 8
+        #assert self.width == 8
+        tile_data = stream.read(self.depth*self.width*self.height//8)
+        tile = pyarray.array("B", [0]*8*self.width)
+        i = 0
         for d in range(self.depth):
             for line in range(self.height):
-                layer = bits(ord(stream.read(1)))
+                layer = bits(tile_data[i])
+                i += 1
                 for x in range(8):
-                    tile[line][7-x] |= layer[x] << d
+                    tile[line*self.width + 7-x] |= layer[x] << d
         return self(tile)
     
     def _save(self, ctx, path):
         self._filename, f = self._open_with_path(ctx, path)
         w = png.Writer(self.width, self.height, greyscale=True, bitdepth=self.depth)
-        w.write(f, self.tile)
+        w.write_array(f, self.tile)
         f.close()
 
 class Tile1BPP(PlanarTile):
@@ -360,13 +366,17 @@ class Array(list, Primitive):
         else:
             length = self._length
         
+        if self._type == Byte:
+            # Speed optimization for byte arrays!
+            return stream.read(length)
+        
         i = 0
         while True:
             item = self._type.parse_stream(stream, ctx, path + [i], index=i)
             
             if self._concat and len(contents) \
               and type(contents[-1]) == type(item) \
-              and (isinstance(item, str) or isinstance(item, bytes)):
+              and isinstance(item, str):
                 contents[-1] += item
             else:
                 contents.append(item)
@@ -401,7 +411,13 @@ class Array(list, Primitive):
         for item0, item1 in zip(self, other):
             newlist.append(item0 | item1)
         
-        return type(self)(newlist)
+        newlist = type(self)(newlist)
+        
+        # XXX :(
+        if len(newlist) > 0:
+            newlist._type = type(newlist[0])
+        
+        return newlist
         
     def _save(self, ctx, path):
         for i, elem in enumerate(self):
@@ -433,10 +449,20 @@ class Tileset(Array):
         if issubclass(self._type, Tile):
             # XXX maybe remove this
             self._filename, f = self._type._open_with_path(self, ctx, path)
-            w = png.Writer(self._type.width, self._type.height*len(self),
+            width = 8
+            height = len(self) * 8
+            w = png.Writer(width, height,
                 greyscale=True, bitdepth=self._type.depth)
             
-            w.write(f, sum((t.tile for t in self), []))
+            pic = pyarray.array("B", [])
+            for y in range(height):
+                for x in range(width):
+                    tileno = ((y//8) * (width//8)) + x//8
+                    if tileno < len(self):
+                        pic.append(self[tileno].tile[(y%8) * (width//8) + x%8])
+                    else:
+                        pic.append(0)
+            w.write_array(f, pic)
             f.close()
         elif issubclass(self._type, Tileset):
             self._filename, f = self._type._type._open_with_path(self, ctx, path)
@@ -449,13 +475,11 @@ class Tileset(Array):
                 w = png.Writer(width, height,
                     greyscale=False, palette=palette.eightbit(), bitdepth=self._type._type.depth)
             
-            pic = []
+            pic = pyarray.array("B", [])
             for y in range(height):
-                row = []
                 for x in range(width):
-                    row.append(self[y//8][x//8].tile[y%8][x%8])
-                pic.append(row)
-            w.write(f, pic)
+                    pic.append(self[y//8][x//8].tile[(y%8) * 8 + x%8])
+            w.write_array(f, pic)
             f.close()
         else:
             raise NotImplementedError()
@@ -518,7 +542,6 @@ class Container(dict, Primitive):
         ctx.pop()
         
         return self
-    
     
     @classmethod
     def parse_stream(self, stream, ctx=None, path=None, index=None):

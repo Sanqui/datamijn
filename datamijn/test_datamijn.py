@@ -901,13 +901,18 @@ color2      ColorAlias
     assert result.color1 == result.Color.Red
     assert result.color2 == result.Color.White
 
-def test_save_tile(tmpdir):
-    tmpdir.join("test.dm").write("""
-tile    Tile1BPP
+@pytest.mark.parametrize("tile_type", [
+    "Tile1BPP",
+    "NESTile",
+    "GBTile"
+])
+def test_save_tile(tmpdir, tile_type):
+    tmpdir.join("test.dm").write(f"""
+tile    {tile_type}
 !save tile
 """)
     
-    result = datamijn.parse(open(tmpdir.join("test.dm")), b('0011223344556677'), tmpdir.join("x"))
+    result = datamijn.parse(open(tmpdir.join("test.dm")), b('0011223344556677')*2, tmpdir.join("x"))
     assert str(result.tile._filename) == "tile.png"
     assert open(tmpdir.join("/x/tile.png"))
 
