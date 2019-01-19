@@ -459,7 +459,7 @@ class Tileset(Array):
                 for x in range(width):
                     tileno = ((y//8) * (width//8)) + x//8
                     if tileno < len(self):
-                        pic.append(self[tileno].tile[(y%8) * (width//8) + x%8])
+                        pic.append(self[tileno].tile[(y%8) * 8 + x%8])
                     else:
                         pic.append(0)
             w.write_array(f, pic)
@@ -815,7 +815,7 @@ class Pipe(Primitive):
     def parse_stream(self, stream, ctx, path, index=None):
         if issubclass(self._right_type, PipedPrimitive):
             ctx = []
-            left = self._left_type.parse_stream(stream, ctx, path)
+            left = self._left_type.parse_stream(stream, ctx, path, index=index)
             result = self._right_type.parse_left(left, ctx, path)
             return result
         else:
