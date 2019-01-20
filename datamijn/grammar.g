@@ -57,6 +57,7 @@ type: typename               -> type_typename
     | type "|" type          -> type_pipe
     | type "->" field_name   -> type_foreign_key
     | ctx_expr_par           -> type_equ
+    | "<" type               -> type_yield
 
 pointer: /@[^ ]*/
 pipepointer: /\|@[^ ]*/
@@ -80,6 +81,8 @@ field: field_name ctx_expr _NL+           -> equ_field
      | /\!if ([^\{]+)/ container ("!else" container)? _NL+ -> if_field
      | /\!assert(.*)/ _NL+                -> assert_field
      | "!save" field_name _NL+            -> save_field
+     | "!debug" field_name _NL+           -> debug_field
+     | "<" type _NL+                      -> yield_field
 
 COMMENT: /\/\/.*/
 _NL: COMMENT? /(\r?\n[\t ]*)+/

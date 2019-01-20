@@ -254,19 +254,28 @@ class Byte(Primitive, bytes):
     _size = 1
     @classmethod
     def parse_stream(self, stream, ctx, path, index=None, **kwargs):
-        return self(stream.read(1))
+        read = stream.read(1)
+        if len(read) != self._size:
+            raise Exception(f"Failed to read stream\nPath: {'.'.join(str(x) for x in path)}")
+        return self(read)
 
 class Short(Primitive, bytes):
     _size = 2
     @classmethod
     def parse_stream(self, stream, ctx, path, index=None, **kwargs):
-        return self(stream.read(2)[::-1])
+        read = stream.read(2)[::-1]
+        if len(read) != self._size:
+            raise Exception(f"Failed to read stream\nPath: {'.'.join(str(x) for x in path)}")
+        return self(read)
 
 class Word(Primitive, bytes):
     _size = 4
     @classmethod
     def parse_stream(self, stream, ctx, path, index=None, **kwargs):
-        return self(stream.read(4)[::-1])
+        read = stream.read(4)[::-1]
+        if len(read) != self._size:
+            raise Exception(f"Failed to read stream\nPath: {'.'.join(str(x) for x in path)}")
+        return self(read)
 
 class B1(Primitive, int):
     _size = 1/8
@@ -459,7 +468,9 @@ class Tileset(Array):
         palette = getattr(self, "_palette", None)
         if issubclass(self._type, Tile):
             # XXX maybe remove this
-            self._filename, f = self._type._open_with_path(self, ctx, path)
+            for i, elem in enumerate(self):
+                elem._save(ctx, path + [i])
+            '''self._filename, f = self._type._open_with_path(self, ctx, path)
             width = 8
             height = len(self) * 8
             w = png.Writer(width, height,
@@ -474,7 +485,7 @@ class Tileset(Array):
                     else:
                         pic.append(0)
             w.write_array(f, pic)
-            f.close()
+            f.close()'''
         elif issubclass(self._type, Tileset):
             self._filename, f = self._type._type._open_with_path(self, ctx, path)
             width = self._type._type.width*len(self[0])
@@ -652,6 +663,12 @@ class Container(dict, Primitive):
                 continue
             value._save(ctx, path + [key])
     
+    def _is_empty(self):
+        for key in self:
+            if not key.startswith("_"):
+                return False
+        return True
+    
     def __repr__(self):
         name = type(self).__name__
         if name == "Container":
@@ -749,6 +766,24 @@ class PipePointer(Pointer):
         pipebuffer.seek(pos)
         return obj
 
+class Yield(Primitive):
+    @classmethod
+    def resolve(self, ctx, path):
+        self._type = self._type.resolve(ctx, path)
+        self.__name__ = f"{self._type.__name__}Yield"
+        return self
+    
+    @classmethod
+    def parse_stream(self, stream, ctx, path, index=None, pipestream=None, **kwargs):
+        # TODO check this in resolve already
+        if not pipestream:
+            raise Exception(f'Cannot yield outside of a pipe.\nPath: {".".join(str(x) for x in path)}')
+        data = self._type.parse_stream(stream, ctx, path, **kwargs)
+        if not isinstance(data, bytes):
+            raise TypeError(f'Only bytes may be yielded through a pipe (not {type(data).__name__}).\nPath: {".".join(str(x) for x in path)}')
+        pipestream.append(data)
+        return None
+
 class StringType(Primitive):
     def __init__(self, string):
         self.string = string
@@ -813,13 +848,14 @@ class MatchType(Primitive, metaclass=MatchTypeMetaclass):
                 return self._match[self._default_key].parse_stream(stream, ctx + [ctx_extra], path + [f"[_]"], **kwargs)
             else:
                 # XXX improve this error
-                raise KeyError(f"Parsed value {value}, but not present in match.")
+                raise Exception(f"Parsed value {value}, but not present in match.\nPath: {'.'.join(str(x) for x in path)}")
 
 class CharMatchType(MatchType):
     pass
 
 class PipeStream(IOWithBits):
-    def __init__(self, stream, ctx, type_):
+    def __init__(self, stream, ctx, type_, path):
+        self._path = path
         self._stream = stream
         self._ctx = ctx
         self._type = type_
@@ -834,15 +870,20 @@ class PipeStream(IOWithBits):
     def read(self, num):
         self._buffer.seek(0, 2) # SEEK_END
         while self._free_bytes < num:
-            result = self._type.parse_stream(self._stream, self._ctx, [f"({self})"], pipebuffer=self._buffer) # XXX
-            if not isinstance(result, bytes):
-                print(repr(result))
-                raise TypeError(f"Pipe received {type(result)}.  Only bytes may be passed through a pipe.")
-            self._free_bytes += len(result)
-            self._buffer.write(result)
+            result = self._type.parse_stream(self._stream, self._ctx, self._path + ["<PipeStream>"], pipebuffer=self._buffer, pipestream=self) # XXX
+            if result != None and not (isinstance(result, Container) and result._is_empty()):
+                if not isinstance(result, bytes):
+                    print(repr(result))
+                    errormsg = f"Pipe received {type(result)}.  Only bytes may be passed through a pipe."
+                    if isinstance(result, Container):
+                        errormsg += "\nHint: if you're yielding data, prefix your keys with _."
+                    raise TypeError(errormsg)
+                self._free_bytes += len(result)
+                self._buffer.write(result)
         
         self._buffer.seek(self._pos)
         val = self._buffer.read(num)
+        assert(len(val) == num)
         self._pos += num
         self._free_bytes -= num
         
@@ -851,9 +892,19 @@ class PipeStream(IOWithBits):
     def tell(self):
         return None
     
+    def append(self, data):
+        pos = self._buffer.tell()
+        self._buffer.seek(0, 2)
+        self._free_bytes += len(data)
+        self._buffer.write(data)
+        self._buffer.seek(pos)
+    
     @property
     def empty(self):
         return self._free_bytes == 0 and not self._bit_number
+    
+    def __repr__(self):
+        return (f"<{'.'.join(str(x) for x in self._path)} PipeStream>")
 
 class Pipe(Primitive):
     # _left_type
@@ -877,7 +928,7 @@ class Pipe(Primitive):
             return result
         else:
             ctx.append({'_right': self._right_type})
-            pipe_stream = PipeStream(stream, ctx, self._left_type)
+            pipe_stream = PipeStream(stream, ctx, self._left_type, path=path)
             result = self._right_type.parse_stream(pipe_stream, ctx, path, **kwargs)
             #if not pipe_stream.empty:
             #    raise ValueError("Unaccounted data remaining in pipe.  TODO this should be suppressable")
@@ -991,6 +1042,17 @@ class SaveField(Field):
     def parse_stream(self, stream, ctx, path, index=None, **kwargs):
         foreign = ctx[-1][self._field_name]
         foreign._save(ctx, path + [self._field_name])
+
+class DebugField(Field):
+    def __init__(self, field_name):
+        self._field_name = field_name
+    
+    def resolve(self, ctx, path):
+        return self
+    
+    def parse_stream(self, stream, ctx, path, index=None, **kwargs):
+        foreign = ctx[-1][self._field_name]
+        print(f"{self._field_name} is <{type(foreign).__name__}>: {repr(foreign)}")
 
 class Color(PipedPrimitive):
     @property
@@ -1142,6 +1204,10 @@ class TreeToStruct(Transformer):
         value = tree[0]
         return Computed.new("Computed", _expr=value)
     
+    def type_yield(self, tree):
+        type = tree[0]
+        return Yield.new("Yield", _type=type)
+    
     def type_match(self, tree):
         type = tree[0]
         match = tree[1]
@@ -1191,6 +1257,16 @@ class TreeToStruct(Transformer):
         field_name = f[0]
         
         return SaveField(field_name)
+    
+    def debug_field(self, f):
+        field_name = f[0]
+        
+        return DebugField(field_name)
+    
+    def yield_field(self, f):
+        type = f[0]
+        
+        return (None, Yield.new("Yield", _type=type))
     
     def type_typename(self, f):
         return f[0]

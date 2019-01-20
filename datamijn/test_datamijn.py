@@ -538,14 +538,15 @@ bits     byte | {
 def test_pipebuffer():
     dm = """
 stuff     {
-    bytes       [4]byte
-    last_byte   |@-1 byte
-    =bytes + last_byte
-} | [5]u8
+    bytes          [4]byte
+    repeat_bytes   |@-2 [6]byte
+    =bytes + repeat_bytes
+} | [10]u8
 """
     result = datamijn.parse(dm, b("01020304"))
-    assert result.stuff == [1, 2, 3, 4, 4]
+    assert result.stuff == [1, 2, 3, 4, 3, 4, 3, 4, 3, 4]
 
+@pytest.mark.xfail
 def test_byte_pipe_unaccounted():
     dm = """
 bits     byte | {
@@ -557,6 +558,17 @@ bits     byte | {
 """
     with pytest.raises(ValueError):
         result = datamijn.parse(dm, b("11"))
+
+def test_yield():
+    dm = """
+test {
+    < byte
+    _ byte
+    _foo < byte
+} | [2]u8
+"""
+    result = datamijn.parse(dm, b("000102"))
+    assert result.test == [0, 2]
 
 def test_short_pipe():
     dm = """
