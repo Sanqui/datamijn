@@ -48,16 +48,31 @@ count: "[" expr "]"
 
 typename: NAME               -> typename
 
-type: typename               -> type_typename
+SIGNSUM: "+" | "-"
+SIGNPRODUCT: "*" | "/"
+
+type:   expr1
+
+?expr1: expr2
+      | expr1 SIGNSUM expr2
+
+?expr2: expr3
+      | expr2 SIGNPRODUCT expr3
+
+?expr3: expr4
     | container              -> type_container
-    | typedef                -> type_typedef
-    | count type             -> type_count
-    | type match             -> type_match
-    | type "char" match      -> type_char_match
-    | type "|" type          -> type_pipe
-    | type "->" field_name   -> type_foreign_key
-    | ctx_expr_par           -> type_equ
-    | "<" type               -> type_yield
+    | ":" NAME type          -> typedef
+    | ":" NAME               -> typedefvoid
+//    | count expr4            -> type_count
+//    | expr4 match            -> type_match
+//    | expr4 "char" match     -> type_char_match
+//    | expr4 "|" expr4        -> type_pipe
+//    | expr4 "->" field_name  -> type_foreign_key
+//    | ctx_expr_par           -> type_equ
+//    | "<" expr4              -> type_yield
+
+expr4: typename               -> type_typename
+     | "(" expr1 ")"
 
 pointer: /@[^ ]*/
 pipepointer: /\|@[^ ]*/
@@ -66,8 +81,8 @@ field_params:
     | pointer
     | pipepointer
 
-typedef: ":" NAME type              -> typedef
-    |    ":" NAME                   -> typedefvoid
+//typedef: ":" NAME type              -> typedef
+//    |    ":" NAME                   -> typedefvoid
 
 field_name: NAME                    -> field_name
     | field_name "." field_name     -> field_name_dot
@@ -76,13 +91,13 @@ field_name: NAME                    -> field_name
 
 field: field_name ctx_expr _NL+           -> equ_field
      | ctx_expr _NL+                      -> bare_equ_field
-     | field_name field_params type _NL+  -> instance_field
-     | typedef _NL+                       -> typedef_field
+     | field_name ":" field_params type _NL+  -> instance_field
      | /\!if ([^\{]+)/ container ("!else" container)? _NL+ -> if_field
      | /\!assert(.*)/ _NL+                -> assert_field
      | "!save" field_name _NL+            -> save_field
      | "!debug" field_name _NL+           -> debug_field
      | "<" type _NL+                      -> yield_field
+//     | typedef _NL+                       -> typedef_field
 
 COMMENT: /\/\/.*/
 _NL: COMMENT? /(\r?\n[\t ]*)+/

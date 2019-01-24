@@ -1,9 +1,9 @@
 !import ascii
 
-:Coords {
-    x       u8
-    y       u8
-    nested {
+$Coords {
+    x       : u8
+    y       : u8
+    nested  : {
         z       u8
     }
 }
@@ -71,3 +71,5 @@ gfx {
     sanquiderp = sanquiderp | pal
     !save sanquiderp
 }
+
+addition    u8 + u8

@@ -736,6 +736,9 @@ class Computed(Primitive):
             pass
         return result
 
+class ExprType(Primitive):
+    pass
+
 # XXX this doesn't work as a class type - OK?
 class Pointer(Primitive):
     def __init__(self, inner, address_expr):
@@ -1207,6 +1210,11 @@ class TreeToStruct(Transformer):
     def type_yield(self, tree):
         type = tree[0]
         return Yield.new("Yield", _type=type)
+    
+    def type_expr(self, tree):
+        print(tree)
+        
+        return None
     
     def type_match(self, tree):
         type = tree[0]
