@@ -7,6 +7,7 @@
 import sys
 import os.path
 import math
+import operator
 from pathlib import Path
 from io import BytesIO, BufferedIOBase
 from pprint import pprint
@@ -16,6 +17,8 @@ from lark import Lark, Transformer
 from lark.tree import Tree
 import oyaml as yaml
 import png
+
+UPPERCASE = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
 class IOWithBits(BufferedIOBase):
     def __init__(self, *args, **kvargs):
@@ -66,6 +69,8 @@ class Primitive():
     _char = False
     _embed = False
     _forms = None
+    _final = False
+    _yields = False
     _final_type = None
     
     def __init__(self, value=None, data=None):
@@ -342,6 +347,10 @@ class Array(list, Primitive):
             (Tileset, Tile):    Tileset,
             (Color,):           Palette
         }
+        if self._length != None and not isinstance(self._length, int):
+            self._length = self._length.resolve(ctx, path)
+            if self._length._final:
+                self._length = self._length.parse_stream(None, None, path)
         self._type = self._type.resolve(ctx, path)
         
         for elem_types, new_class in ARRAY_CLASSES.items():
@@ -370,12 +379,12 @@ class Array(list, Primitive):
     @classmethod
     def parse_stream(self, stream, ctx, path, index=None, **kwargs):
         contents = []
-        if isinstance(self._length, str):
-            length = eval_with_ctx(self._length, ctx)
+        if isinstance(self._length, type) and issubclass(self._type, Primitive):
+            length = self._length.parse_stream(stream, ctx, path, **kwargs)
         else:
             length = self._length
         
-        if self._type == Byte:
+        if self._length != None and self._type == Byte:
             # Speed optimization for byte arrays!
             return stream.read(length)
         
@@ -546,6 +555,8 @@ class Container(dict, Primitive):
         new_types = {}
         
         for name, type_ in self._types.items():
+            if name[0] not in UPPERCASE + "!":
+                raise Exception(f"{name}: Type names must start with an uppercase letter.")
             resolved = type_.resolve(ctx + [new_types], path + [name])
             if resolved._embed:
                 new_types.update(resolved._types)
@@ -671,6 +682,7 @@ class Container(dict, Primitive):
     
     def __repr__(self):
         name = type(self).__name__
+        return f"<{name}>"
         if name == "Container":
             name = ""
         out = f"{name} {'{'}\n"
@@ -685,22 +697,69 @@ class Container(dict, Primitive):
             out = out.replace("\n", "")
         return out.strip()
 
-class LazyType(Primitive):
-    #_type
+class ExprName(Primitive):
+    #_name
     
     @classmethod
     def resolve(self, ctx, path):
-        # TODO nested types?
+        if self._name[0] in UPPERCASE:
+            for context in reversed(ctx):
+                if type(context) == dict:
+                    if self._name in context:
+                        return context[self._name].resolve(ctx, path)
+                else:
+                    if self._name in context._types:
+                        return context._types[self._name].resolve(ctx, path)
+            
+            context = ".".join(str(x) for x in path)
+            raise NameError(f"Cannot resolve type {self._name}, path: {context}")
+        else:
+            return self
+
+    @classmethod
+    def parse_stream(self, stream, ctx, path, index=None, **kwargs):
         for context in reversed(ctx):
-            if type(context) == dict:
-                if self._type in context:
-                    return context[self._type].resolve(ctx, path)
-            else:
-                if self._type in context._types:
-                    return context._types[self._type].resolve(ctx, path)
+            if self._name in context:
+                return context[self._name]
         
-        context = ".".join(str(x) for x in path)
-        raise NameError(f"Cannot resolve type {self._type}, path: {context}")
+        pathstr = ".".join(str(x) for x in path)
+        raise NameError(f"Cannot resolve name {self._name}, path: {pathstr}")
+
+class ExprNum(Primitive):
+    _final = True
+    #_num
+    
+    @classmethod
+    def resolve(self, ctx, path):
+        return self
+    
+    @classmethod
+    def parse_stream(self, stream, ctx, path, index=None, **kwargs):
+        return self._num
+
+class Expr(Primitive):
+    #_left
+    #_right
+    #_op
+    
+    @classmethod
+    def resolve(self, ctx, path):
+        self._left = self._left.resolve(ctx, path)
+        self._right = self._right.resolve(ctx, path)
+        self._final = self._left._final and self._right._final
+        return self
+    
+    @classmethod
+    def parse_stream(self, stream, ctx, path, index=None, **kwargs):
+        left = self._left.parse_stream(stream, ctx, path, index=index, **kwargs)
+        right = self._right.parse_stream(stream, ctx, path, index=index, **kwargs)
+        return self._op(left, right)
+
+class Index(Primitive):
+    @classmethod
+    def parse_stream(self, stream, ctx, path, index=None, **kwargs):
+        return index
+    
 
 def eval_with_ctx(expr, ctx, extra_ctx=None):
     if len(ctx):
@@ -770,8 +829,10 @@ class PipePointer(Pointer):
         return obj
 
 class Yield(Primitive):
+    _yields = True
     @classmethod
     def resolve(self, ctx, path):
+        # TODO yields must not be assigned
         self._type = self._type.resolve(ctx, path)
         self.__name__ = f"{self._type.__name__}Yield"
         return self
@@ -1083,13 +1144,14 @@ class RGBColor(Color):
     
 
 primitive_types = {
-    "b1": B1,
-    "u8": U8,
-    "u16": U16,
-    "u32": U32,
-    "byte": Byte,
-    "short": Short,
-    "word": Word,
+    "B1": B1,
+    "U8": U8,
+    "U16": U16,
+    "U32": U32,
+    "Byte": Byte,
+    "Short": Short,
+    "Word": Word,
+    "I": Index,
     # TODO long
     "Tile1BPP": Tile1BPP,
     "NESTile": NESTile,
@@ -1100,7 +1162,7 @@ primitive_types = {
 }
 
 for i in range(2, 33):
-    primitive_types[f"b{i}"] = make_bit_type(i)
+    primitive_types[f"B{i}"] = make_bit_type(i)
 
 class TreeToStruct(Transformer):
     def __init__(self, path):
@@ -1163,13 +1225,6 @@ class TreeToStruct(Transformer):
         self.match_last = -1
         return dict(tree)
     
-    def typename(self, token):
-        type_ = token[0]
-        if type_ in primitive_types:
-            return primitive_types[type_]
-        else:
-            return LazyType.new(f"Lazy{type_}", _type=type_)
-    
     def container(self, tree):
         struct = []
         types = {}
@@ -1197,6 +1252,23 @@ class TreeToStruct(Transformer):
         left_type, right_type = tree
         return Pipe.new(f"{left_type.__name__}|{right_type.__name__}",
             _left_type=left_type, _right_type=right_type)
+    
+    def expr_infix(self, tree):
+        OPERATIONS = {
+            "+": operator.add,
+            "-": operator.sub,
+            "*": operator.mul,
+            "/": operator.floordiv
+        }
+        left, sign, right = tree
+        return Expr.new(f"({sign} {left.__name__} {right.__name__})",
+            _left=left, _right=right, _op=OPERATIONS[sign])
+    
+    def expr_bracket(self, tree):
+        return tree[0]
+    
+    def type(self, tree):
+        return tree[0]
     
     def type_foreign_key(self, tree):
         type_, field_name = tree
@@ -1276,8 +1348,16 @@ class TreeToStruct(Transformer):
         
         return (None, Yield.new("Yield", _type=type))
     
-    def type_typename(self, f):
-        return f[0]
+    def expr_name(self, f):
+        name = f[0]
+        if name in primitive_types:
+            return primitive_types[name]
+        else:
+            return ExprName.new(f"{name}", _name=name)
+    
+    def expr_num(self, f):
+        num = eval(f[0])
+        return ExprNum.new(f"{num}", _num=num)
     
     def type_typedef(self, f):
         return f[0]

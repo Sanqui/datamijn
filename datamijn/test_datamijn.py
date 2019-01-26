@@ -8,8 +8,8 @@ def b(string):
     return decode(string.replace(" ", ""), 'hex')
 
 @pytest.mark.parametrize("type,data,value", [
-    ("u8",  b('01'), 1),
-    ("u16", b('0102'), 0x0201),
+    ("U8",  b('01'), 1),
+    ("U16", b('0102'), 0x0201),
 #    ("u32", b('01020304'), 0x04030201),
 ])
 def test_basic_type(type, data, value):
@@ -23,8 +23,8 @@ def test_basic_type(type, data, value):
 def test_typedef():
     dm = """
 position  {
-    x   u8
-    y   u8
+    x   U8
+    y   U8
 }"""
     result = datamijn.parse(dm, b('1020'))
     assert result.position.x == 0x10
@@ -42,19 +42,27 @@ position  {
 
 def test_type_definition():
     dm = """
-:Byte   u8
+:OneByte   U8
 
-value   Byte
+value   OneByte
 """
     result = datamijn.parse(dm, b('01'))
     
     assert result.value == 1
 
+    dm = """
+:onebyte   U8
+
+value   onebyte
+"""
+    with pytest.raises(Exception):
+        result = datamijn.parse(dm, b('01'))
+
 def test_typedef_inline_name():
     dm = """
 value   [4] :Coord {
-    x   u8
-    y   u8
+    x   U8
+    y   U8
 }
 """
     result = datamijn.parse(dm, b('0001101120213031'))
@@ -69,64 +77,82 @@ value   [4] :Coord {
     assert type(value).__name__ == "Coord[4]"
 
 def test_array():
-    dm = """bytes   [6]u8"""
+    dm = """Bytes   [6]U8"""
     
     nums = [1, 2, 3, 4, 5, 6]
     result = datamijn.parse(dm, b('010203040506'))
     
-    assert result.bytes == nums
+    assert result.Bytes == nums
     
     # test iteration
-    for byte, real in zip(result.bytes, nums):
-        assert byte == real
+    for Byte, real in zip(result.Bytes, nums):
+        assert Byte == real
 
 def test_nested_array():
-    dm = """bytes   [2][2][2]u8"""
+    dm = """Bytes   [2][2][2]U8"""
     
     result = datamijn.parse(dm, b('0102030405060708'))
-    assert result.bytes[0][0] == [1, 2]
-    assert result.bytes[0][1] == [3, 4]
-    assert result.bytes[1][0] == [5, 6]
-    assert result.bytes[1][1] == [7, 8]
+    assert result.Bytes[0][0] == [1, 2]
+    assert result.Bytes[0][1] == [3, 4]
+    assert result.Bytes[1][0] == [5, 6]
+    assert result.Bytes[1][1] == [7, 8]
 
 
 def test_array_inline_typedef():
     dm = """
-bytes   [2]{
-    a   u8
-    b   u8
+Bytes   [2]{
+    a   U8
+    b   U8
 }"""
     
     result = datamijn.parse(dm, b('01020304'))
-    assert result.bytes[0].a == 1
-    assert result.bytes[0].b == 2
-    assert result.bytes[1].a == 3
-    assert result.bytes[1].b == 4
+    assert result.Bytes[0].a == 1
+    assert result.Bytes[0].b == 2
+    assert result.Bytes[1].a == 3
+    assert result.Bytes[1].b == 4
 
 
 def test_array_hex():
-    dm = "bytes [0xff]u8"
+    dm = "Bytes [0xff]U8"
     result = datamijn.parse(dm, b('01')*0xff)
-    assert len(result.bytes) == 0xff
+    assert len(result.Bytes) == 0xff
 
 def test_equ():
     dm = "test  = 5"
     result = datamijn.parse(dm, b'')
     assert result.test == 5
 
+def test_expr():
+    dm = """
+five        5
+six         5 + 1
+ten         five * 2
+one         five / five
+twenty      five * (3 + one)
+
+Byte_plus_one U8 + 1
+"""
+    result = datamijn.parse(dm, b('0e'))
+    assert result.five == 5
+    assert result.six == 6
+    assert result.ten == 10
+    assert result.one == 1
+    assert result.twenty == 20
+    
+    assert result.Byte_plus_one == 0xf
 
 def test_array_dynamic():
     dm = """
 count   = 2
-bytes   [count]u8
+Bytes   [count]U8
 """
     result = datamijn.parse(dm, b('aabb'))
-    assert result.bytes == [0xaa, 0xbb]
+    assert result.Bytes == [0xaa, 0xbb]
 
 def test_container_computed_value():
     dm = """
 :Test    {
-    x       u8
+    x       U8
     = x * 2
 }
 
@@ -145,28 +171,28 @@ test    {
     = 2
 }
 
-bytes    [test] u8
+Bytes    [test] U8
 nested {
-    bytes2 [test]u8
+    Bytes2 [test]U8
 }
 """
     result = datamijn.parse(dm, b("aabbccdd"))
     assert result.test == 2
-    assert result.bytes == [0xaa, 0xbb]
-    assert result.nested.bytes2 == [0xcc, 0xdd]
+    assert result.Bytes == [0xaa, 0xbb]
+    assert result.nested.Bytes2 == [0xcc, 0xdd]
 
 @pytest.mark.parametrize("test_hex", [True, False])
 def test_pointer(test_hex):
     ptr = "0x0a" if test_hex else "10"
-    db = f"pointed_byte @{ptr} u8"
+    db = f"pointed_Byte @{ptr} U8"
     result = datamijn.parse(db, b('00')*10 + b('01'))
-    assert result.pointed_byte == 1
-    assert result.pointed_byte._data.address == 10
+    assert result.pointed_Byte == 1
+    assert result.pointed_Byte._data.address == 10
 
 def test_dynamic_pointer():
     db = """
-val_ptr u16
-val     @val_ptr u8
+val_ptr U16
+val     @val_ptr U8
 """
     data = b('1000' + '00'*14 + 'aa')
     result = datamijn.parse(db, data)
@@ -174,8 +200,8 @@ val     @val_ptr u8
 
 def test_dynamic_pointer_complex():
     db = """
-val_ptr [1]u8
-val     @_root.val_ptr[0] u8
+val_ptr [1]U8
+val     @_root.val_ptr[0] U8
 """
     data = b('0102')
     result = datamijn.parse(db, data)
@@ -185,9 +211,9 @@ val     @_root.val_ptr[0] u8
 
 def test_dynamic_pointer_array():
     db = """
-val_ptr         u16
-val_count       u8
-vals            @val_ptr [val_count] u8
+val_ptr         U16
+val_count       U8
+vals            @val_ptr [val_count] U8
 """
     data = b('1000' + '03' + '00'*13 + 'aabbcc')
     result = datamijn.parse(db, data)
@@ -199,11 +225,11 @@ test    {
     = 1
 }
 
-byte    @test u8
+Byte    @test U8
 """
     result = datamijn.parse(dm, b("00aa"))
     assert result.test == 1
-    assert result.byte == 0xaa
+    assert result.Byte == 0xaa
 
 def test_void_type():
     dm = """
@@ -220,7 +246,7 @@ token   Token
 
 def test_match():
     db = """
-test        u8 match {
+test        U8 match {
     0 => :Zero
     1 => :One
     2 => :Two
@@ -231,7 +257,7 @@ test        u8 match {
 
 def test_match_default():
     db = """
-test        u8 match {
+test        U8 match {
     0 => :Zero
     1 => :One
     _ => :Unknown
@@ -241,7 +267,7 @@ test        u8 match {
 
 def test_match_default_name():
     db = """
-test        u8 match {
+test        U8 match {
     0 => :Zero
     1 => :One
     x => =x
@@ -252,19 +278,19 @@ test        u8 match {
 
 def test_match_missing():
     db = """
-test       [2] u8 match {
+test       [2] U8 match {
     0 => :Zero
     1 => :One
 }"""
 
-    with pytest.raises(KeyError):
+    with pytest.raises(Exception):
         result = datamijn.parse(db, b("0105"))
     #assert result.test == ["one", 5]
 
 
 def test_match_string():
     db = """
-test        u8 match {
+test        U8 match {
     0 => "a a"
     1 => 'b b'
 }"""
@@ -274,7 +300,7 @@ test        u8 match {
 
 def test_match_autoincrement():
     db = """
-num        u8 match {
+num        U8 match {
              :Zero
     0x20  => :TwoOh
              :TwoOne
@@ -288,7 +314,7 @@ num        u8 match {
 
 def test_match_string():
     db = """
-:Char        u8 match {
+:Char        U8 match {
     0x21 => "!!"
     0x41 => "A"
     0x42 => "B"
@@ -303,7 +329,7 @@ string      [5]Char
 
 def test_match_char_string():
     db = """
-:Char        u8 char match {
+:Char        U8 char match {
     0x21 => "!!"
     0x41 => "A"
     0x42 => "B"
@@ -319,34 +345,34 @@ string      [5]Char
 def test_bits():
     dm = """
 :SomeBits {
-    a          b1
-    b          b1
-    two        [2]b1
-    rest       b4
+    a          B1
+    b          B1
+    two        [2]B1
+    rest       B4
 }
 
 bits            SomeBits
-following_byte  u8
+following_Byte  U8
 """
     result = datamijn.parse(dm, b("0744"))
     assert result.bits.a == 1
     assert result.bits.b == 1
     assert result.bits.two == [1, 0]
     assert result.bits.rest == 0
-    assert result.following_byte == 0x44
+    assert result.following_Byte == 0x44
 
 def test_bit_type():
     dm = """
-:Bits   [8]b1
+:Bits   [8]B1
 bits    Bits
 
 """
     result = datamijn.parse(dm, b("aa"))
     assert result.bits == [0, 1, 0, 1, 0, 1, 0, 1]
 
-def test_bit_byte_boundary():
+def test_bit_Byte_boundary():
     dm = """
-cards   [60]b9
+cards   [60]B9
 """
     result = datamijn.parse(dm, bytes([
                                     0b00000000,
@@ -354,7 +380,7 @@ cards   [60]b9
                                     0b00001000,
                                     0b00011000,
                                     0b01000000,
-                                    0b10100000,
+                                    0B10100000,
                                 ] + [0]*100))
     
     assert result.cards[0:6] == [0, 1, 2, 3, 4, 5]
@@ -372,8 +398,8 @@ empty {
 def test_comment():
     dm = """
 // initial comment
-test0       u8 // comment after line
-test1       u8
+test0       U8 // comment after line
+test1       U8
 // comment at the end
 """
     result = datamijn.parse(dm, b("0001"))
@@ -382,20 +408,20 @@ test1       u8
 
 def test_eval():
     dm = """
-byte            u8
+Byte            U8
 one             = 1
-byte_plus_one   = byte + one
+Byte_plus_one   = Byte + one
 """
     
     result = datamijn.parse(dm, b("05"))
-    assert result.byte == 5
+    assert result.Byte == 5
     assert result.one == 1
-    assert result.byte_plus_one == 6
+    assert result.Byte_plus_one == 6
 
 
 def test_zero_terminated_array():
     dm = """
-numbers         [] u8
+numbers         [] U8
 """
     result = datamijn.parse(dm, b("aabbcc00"))
     assert result.numbers == [0xaa, 0xbb, 0xcc, 0]
@@ -404,7 +430,7 @@ numbers         [] u8
 def test_terminated_array():
     dm = """
 numbers         [] {
-    number      u8
+    number      U8
     = _terminator if number == 0xff else number
 }
 """
@@ -419,8 +445,8 @@ numbers         [] {
 def test_fold_array():
     dm = """
 rle         [2] fold {
-    count      u8
-    value      u8
+    count      U8
+    value      U8
     = [value] * count
 }
 """
@@ -430,7 +456,7 @@ rle         [2] fold {
 
 def test_terminated_string():
     dm = """
-:Char        u8 char match {
+:Char        U8 char match {
     0x41 => "A"
             "B"
             "C"
@@ -446,7 +472,7 @@ string      [] Char
 
 def test_multiple_terminated_string():
     dm = """
-:Char        u8 char match {
+:Char        U8 char match {
     0x41 => "A"
             "B"
             "C"
@@ -466,7 +492,7 @@ string      [] Char
 
 def test_string_with_control_codes():
     dm = """
-:Char        u8 char match {
+:Char        U8 char match {
     0x20 => " "
             "!"
     0x41 => "A"
@@ -478,7 +504,7 @@ def test_string_with_control_codes():
     // ...
     
     0xe0 => :PlayerName
-    0xe1 => :TextSpeed  u8
+    0xe1 => :TextSpeed  U8
     
     0x00 => :End Terminator
 }
@@ -491,7 +517,7 @@ string      [] Char
 
 def test_match_range():
     dm = """
-:Thing        u8 char match {
+:Thing        U8 char match {
     0..8        => "0"
                    "8"
     0x80..0xff  => "Z"
@@ -504,27 +530,27 @@ stuff   [5]Thing
     assert str(result.stuff) == "0080Z"
 
 
-def test_byte():
+def test_Byte():
     dm = """
-byte1    byte
-byte2    byte
-bytes    [4]byte
+Byte1    Byte
+Byte2    Byte
+Bytes    [4]Byte
 """
     result = datamijn.parse(dm, b"a\xe3TEST")
-    assert result.byte1 == b"a"
-    assert result.byte2 == b"\xe3"
-    assert result.bytes == b"TEST"
+    assert result.Byte1 == b"a"
+    assert result.Byte2 == b"\xe3"
+    assert result.Bytes == b"TEST"
 
-def test_byte_pipe():
+def test_Byte_pipe():
     dm = """
-num8     byte | u8
-num16    byte | u16
-bits     byte | {
-    a          b1
-    b          b1
-    two        [2]b1
-    rest       b4
-    more       [8]b1
+num8     Byte | U8
+num16    Byte | U16
+bits     Byte | {
+    a          B1
+    b          B1
+    two        [2]B1
+    rest       B4
+    more       [8]B1
 }
 """
     result = datamijn.parse(dm, b("1122330744ff"))
@@ -538,21 +564,21 @@ bits     byte | {
 def test_pipebuffer():
     dm = """
 stuff     {
-    bytes          [4]byte
-    repeat_bytes   |@-2 [6]byte
-    =bytes + repeat_bytes
-} | [10]u8
+    Bytes          [4]Byte
+    repeat_Bytes   |@-2 [6]Byte
+    =Bytes + repeat_Bytes
+} | [10]U8
 """
     result = datamijn.parse(dm, b("01020304"))
     assert result.stuff == [1, 2, 3, 4, 3, 4, 3, 4, 3, 4]
 
 @pytest.mark.xfail
-def test_byte_pipe_unaccounted():
+def test_Byte_pipe_unaccounted():
     dm = """
-bits     byte | {
-    a          b1
-    b          b1
-    three      [3]b1
+bits     Byte | {
+    a          B1
+    b          B1
+    three      [3]B1
     // 3 bits unaccounted for
 }
 """
@@ -562,17 +588,17 @@ bits     byte | {
 def test_yield():
     dm = """
 test {
-    < byte
-    _ byte
-    _foo < byte
-} | [2]u8
+    < Byte
+    _ Byte
+    _foo < Byte
+} | [2]U8
 """
     result = datamijn.parse(dm, b("000102"))
     assert result.test == [0, 2]
 
 def test_short_pipe():
     dm = """
-cards    short | [64]b9
+cards    Short | [64]B9
 """
     result = datamijn.parse(dm, bytes([
                                     0b00000010,
@@ -581,7 +607,7 @@ cards    short | [64]b9
                                     0b00011000,
                                     0b00001000,
                                     
-                                    0b10100000,
+                                    0B10100000,
                                     0b01000000,
                                 ] + [0]*100))
     
@@ -590,14 +616,14 @@ cards    short | [64]b9
 def test_foreign_assignment():
     dm = """
 struct {
-    x       u8
+    x       U8
     nested {
         
     }
 }
-foo         u8
-struct.y    u8
-struct.nested.bar u8
+foo         U8
+struct.y    U8
+struct.nested.bar U8
 """
     result = datamijn.parse(dm, b("01020304"))
     assert result.struct.x == 1
@@ -607,7 +633,7 @@ struct.nested.bar u8
 
 def test_foreign_assignment_error():
     dm = """
-unknown.x     u8
+unknown.x     U8
 """
     with pytest.raises(NameError):
         result = datamijn.parse(dm, b("01"))
@@ -615,13 +641,13 @@ unknown.x     u8
 def test_foreign_list_assignment():
     dm = """
 stuff [4]{
-    a   u8
-    b   u8
-    c   u8
+    a   U8
+    b   U8
+    c   U8
 }
-stuff[].d   [4]u8
+stuff[].d   [4]U8
 """
-    result = datamijn.parse(dm, b("0a0b0c 1a1b1c 2a2b2c 3a3b3c 0d1d2d3d"))
+    result = datamijn.parse(dm, b("0a0b0c 1a1B1c 2a2B2c 3a3B3c 0d1d2d3d"))
     assert result.stuff[0].a == 0x0a
     assert result.stuff[0].d == 0x0d
     assert result.stuff[3].a == 0x3a
@@ -630,27 +656,27 @@ stuff[].d   [4]u8
 def test_foreign_list_assignment_errors():
     dm = """
 stuff {
-    a       u8
+    a       U8
 }
-stuff[].b   [4]u8
+stuff[].b   [4]U8
 """
     with pytest.raises(TypeError):
         result = datamijn.parse(dm, b("00"*100))
     
     dm = """
 stuff [4] {
-    a       u8
+    a       U8
 }
-stuff[].b   u8
+stuff[].b   U8
 """
     with pytest.raises(TypeError):
         result = datamijn.parse(dm, b("00"*100))
     
     dm = """
 stuff [5] {
-    a       u8
+    a       U8
 }
-stuff[].b   [4]u8
+stuff[].b   [4]U8
 """
     with pytest.raises(TypeError):
         result = datamijn.parse(dm, b("00"*100))
@@ -658,7 +684,7 @@ stuff[].b   [4]u8
 def test_pos():
     dm = """
 pos0        = _pos
-short       u16
+short       U16
 pos1        = _pos
 """
     result = datamijn.parse(dm, b("aaaa"))
@@ -669,11 +695,11 @@ pos1        = _pos
 def test_foreign_key():
     dm = """
 things      [4]{
-    x   u8
-    y   u8
+    x   U8
+    y   U8
 }
 
-thing   u8 -> things
+thing   U8 -> things
 """
     result = datamijn.parse(dm, b("0001 1011 2021 3031  02"))
     
@@ -686,13 +712,13 @@ def test_foreign_key_nested():
 foo {
     bar {
         things      [4]{
-            x   u8
-            y   u8
+            x   U8
+            y   U8
         }
     }
 }
 
-thing   u8 -> foo.bar.things
+thing   U8 -> foo.bar.things
 """
     result = datamijn.parse(dm, b("0001 1011 2021 3031  02"))
     
@@ -703,11 +729,11 @@ thing   u8 -> foo.bar.things
 def test_foreign_key_val():
     dm = """
 things      [4]{
-    x   u8
-    y   u8
+    x   U8
+    y   U8
 }
 
-thing   {= 2} -> things
+thing   2 -> things
 """
     result = datamijn.parse(dm, b("0001 1011 2021 3031"))
     assert result.thing.x == 0x20
@@ -716,10 +742,10 @@ thing   {= 2} -> things
 def test_foreign_key_error():
     dm = """
 things      [4]{
-    x   u8
+    x   U8
 }
 
-thing   u8 -> things
+thing   U8 -> things
 """
     with pytest.raises(IndexError):
         result = datamijn.parse(dm, b("00 11 21 31  05"))
@@ -736,7 +762,7 @@ def test_null():
 
 def test_eval_enum_access():
     dm = """
-FRUIT u8 enum {
+FRUIT U8 enum {
     APPLE
     PEAR
     BANANA
@@ -755,7 +781,7 @@ _start {
 def test_index():
     dm = """
 dummy_array  [4] {
-    index       = _i
+    index       I
 }
 """
     result = datamijn.parse(dm, b"")
@@ -765,11 +791,11 @@ dummy_array  [4] {
 def test_underscore_name():
     dm = """
 foo {
-    a       u8
-    _       u8
-    b       u8
-    _       u8
-    c       u8
+    a       U8
+    _       U8
+    b       U8
+    _       U8
+    c       U8
 }
 """
     result = datamijn.parse(dm, b("0001020304"))
@@ -779,24 +805,24 @@ foo {
 
 def test_rgb_color():
     dm = """
-:GBColor short | {
+:MyColor Short | {
     _max  = 31
-    r     b5
-    g     b5
-    b     b5
-    _     b1
+    r     B5
+    g     B5
+    b     B5
+    _     B1
 } | RGBColor
-:GBPalette [4]GBColor
+:MyPalette [4]MyColor
 
-pal GBPalette
+pal MyPalette
 """
     result = datamijn.parse(dm, b("abcdabcdabcdabcd"))
     assert len(result.pal) == 4
-    assert result.pal[0].r == 11
-    assert result.pal[0].g == 13
-    assert result.pal[0].b == 19
+    assert result.pal[0].r == 13
+    assert result.pal[0].g == 30
+    assert result.pal[0].b == 10
     assert result.pal[0].max == 31
-    assert result.pal[0].hex == "#5a6a9c"
+    assert result.pal[0].hex == "#6af652"
     
 
 def test_if():
@@ -868,11 +894,11 @@ def test_if_else_cross():
 
 def test_assert():
     dm = """
-byte        u8
-!assert byte == 5
+Byte        U8
+!assert Byte == 5
 """
     result = datamijn.parse(dm, b("05"))
-    assert result.byte == 5
+    assert result.Byte == 5
     
 '''
 
@@ -886,7 +912,7 @@ def test_resolve_parent_type():
     dm = """
 object1 {
     :TestA {
-        foo     u8
+        foo     U8
     }
 
     object2 {
@@ -899,7 +925,7 @@ object1 {
 
 def test_import(tmpdir):
     tmpdir.join("color.dm").write("""
-:Color   u8 match {
+:Color   U8 match {
     :White
     :Red
     :Green
@@ -939,6 +965,7 @@ tile    {tile_type}
     assert str(result.tile._filename) == "tile.png"
     assert open(tmpdir.join("/x/tile.png"))
 
+@pytest.mark.xfail
 def test_save_tiles(tmpdir):
     tmpdir.join("test.dm").write("""
 tiles    [20]Tile1BPP
@@ -1037,7 +1064,7 @@ def test_complex():
 def test_cleanup():
     dm = """
 :A {
-    byte    u8
+    Byte    U8
 }
 
 a A"""

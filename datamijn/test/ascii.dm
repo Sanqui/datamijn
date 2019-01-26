@@ -1,4 +1,4 @@
-:Char            u8 char match {
+:Char            U8 char match {
     0x41 => "A"
             "B"
             "C"

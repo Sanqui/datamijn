@@ -1,28 +1,28 @@
 !import ascii
 
-$Coords {
-    x       : u8
-    y       : u8
-    nested  : {
-        z       u8
+:Coords {
+    x       U8
+    y       U8
+    nested  {
+        z       U8
     }
 }
 
 :BytePlusOne {
-    _byte        u8
+    _byte        U8
     _one         = 1
     
     = _byte + _one
 }
 
-:ItemCategory   u8 match {
+:ItemCategory   U8 match {
     0   => :None
     1   => :Potion
     2   => :Weapon
     3   => :Armor
 }
 
-version         u16
+version         U16
 positions       [0x2]Coords
 
 
@@ -30,20 +30,20 @@ byte_plus_one   @0x40 BytePlusOne
 
 item_category   @0x20 ItemCategory
 
-bits            [16]b1
+bits            [16]B1
 
-bytenum         byte | u8
+bytenum         Byte | U8
 
 struct          {
 
 }
 
-struct.x        u8
+struct.x        U8
 
 some_array  [10] {
 }
 
-some_array[].x  [10]u8
+some_array[].x  [10]U8
 
 inner {
     string          @0x30 [4]Char
@@ -56,12 +56,12 @@ gfx {
     !save tiles
 
 
-    :GBColor short | {
+    :GBColor Short | {
         _max  = 31
-        r     b5
-        g     b5
-        b     b5
-        _     b1
+        r     B5
+        g     B5
+        b     B5
+        _     B1
     } | RGBColor
     :GBPalette [4]GBColor
     
@@ -72,4 +72,4 @@ gfx {
     !save sanquiderp
 }
 
-addition    u8 + u8
+addition    U8 + U8
