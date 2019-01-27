@@ -413,7 +413,7 @@ class Array(list, Primitive):
         
         # XXX This sucks, but it's the price for computed values.
         # Hopefully we can get rid of it one day
-        if issubclass(self._type, Container) and self._type._computed_value != None and len(contents) > 0:
+        if issubclass(self._type, Container) and self._type._return != None and len(contents) > 0:
             self._type = type(contents[0])
         
         if self._bytestring or len(contents) and isinstance(contents[0], bytes):
@@ -568,9 +568,14 @@ class Container(dict, Primitive):
         contents = []
         
         for name, type_ in self._contents:
+            if name and isinstance(name, str) and name[0] in UPPERCASE:
+                raise Exception(f"{name}: Field names must start with a lowercase letter.")
             contents.append((name, type_.resolve(ctx, path + [name])))
         
         self._contents = contents
+        
+        if self._return:
+            self._return = self._return.resolve(ctx, path + ["_return"])
         
         ctx.pop()
         
@@ -601,16 +606,10 @@ class Container(dict, Primitive):
             elif isinstance(result, Container) and result._embed:
                 obj.update(result)
         
-        if self._computed_value:
-            computed_value = self._computed_value.parse_stream(stream, ctx, path + ["_computed_value"], index=index, **kwargs)
-            if computed_value != None:
-                pass
-                # AAAAAHHHHH WHO THOUGHT THIS WAS A GOOD IDEA
-                #for name, value in obj.items():
-                #    setattr(computed_value, name, value)
-            
+        if self._return:
+            value = self._return.parse_stream(stream, ctx, path + ["_return"], index=index, **kwargs)
             ctx.pop()
-            return computed_value
+            return value
         else:
             ctx.pop()
             return obj
@@ -683,13 +682,19 @@ class Container(dict, Primitive):
     def __repr__(self):
         name = type(self).__name__
         return f"<{name}>"
+    
+    def _pretty_repr(self):
+        name = type(self).__name__
         if name == "Container":
             name = ""
         out = f"{name} {'{'}\n"
         for name, type_ in self._contents:
             if isinstance(name, tuple): continue
             if not name: continue
-            valrepr = "\n  ".join(repr(self[name]).split('\n'))
+            if isinstance(self[name], Container):
+                valrepr = "\n  ".join(self[name]._pretty_repr().split('\n'))
+            else:
+                valrepr = repr(self[name])
             out += f"  {name}: {valrepr}\n"
         out += "}"
         
@@ -755,11 +760,28 @@ class Expr(Primitive):
         right = self._right.parse_stream(stream, ctx, path, index=index, **kwargs)
         return self._op(left, right)
 
+class Return(Primitive):
+    #_expr
+    
+    @classmethod
+    def resolve(self, ctx, path):
+        self._expr = self._expr.resolve(ctx, path)
+        self._final = self._expr._final
+        return self
+    
+    @classmethod
+    def parse_stream(self, stream, ctx, path, index=None, **kwargs):
+        return self._expr.parse_stream(stream, ctx, path, index=index, **kwargs)
+
 class Index(Primitive):
     @classmethod
     def parse_stream(self, stream, ctx, path, index=None, **kwargs):
         return index
-    
+
+class Position(Primitive):
+    @classmethod
+    def parse_stream(self, stream, ctx, path, index=None, **kwargs):
+        return stream.tell()
 
 def eval_with_ctx(expr, ctx, extra_ctx=None):
     if len(ctx):
@@ -783,8 +805,8 @@ class Computed(Primitive):
     @classmethod
     def parse_stream(self, stream, ctx, path, index=None, **kwargs):
         extra_ctx = {
-            '_pos': stream.tell(),
-            '_i': index
+        #    '_pos': stream.tell(),
+        #    '_i': index
         }
         try:
             result = eval_with_ctx(self._expr, ctx, extra_ctx)
@@ -863,6 +885,8 @@ class MatchTypeMetaclass(type):
     def __getattr__(self, name):
         if name in self._match_types:
             return self._match_types[name]
+        else:
+            raise AttributeError()
 
 class MatchType(Primitive, metaclass=MatchTypeMetaclass):
     @classmethod
@@ -1151,8 +1175,9 @@ primitive_types = {
     "Byte": Byte,
     "Short": Short,
     "Word": Word,
-    "I": Index,
     # TODO long
+    "I": Index,
+    "Pos": Position,
     "Tile1BPP": Tile1BPP,
     "NESTile": NESTile,
     "GBTile": GBTile,
@@ -1179,11 +1204,6 @@ class TreeToStruct(Transformer):
     def stringtype(self, token):
         return StringType(token[0])
     
-    def ctx_expr(self, token):
-        expr = token[0][1:]
-        
-        return expr
-    
     def ctx_expr_par(self, token):
         expr = token[0][2:-1]
         
@@ -1206,10 +1226,6 @@ class TreeToStruct(Transformer):
     
     def match_key_range(self, tree):
         return KeyRange(*tree)
-        
-    def match_expr(self, tree):
-        value = tree[0]
-        return Computed.new("Computed", _expr=value)
     
     def match_field(self, tree):
         if len(tree) == 1:
@@ -1228,14 +1244,14 @@ class TreeToStruct(Transformer):
     def container(self, tree):
         struct = []
         types = {}
-        computed_value = None
+        return_ = None
         
-        if len(tree) and isinstance(tree[-1], type) and issubclass(tree[-1], Computed):
-            computed_value = tree.pop()
+        if len(tree) and isinstance(tree[-1], type) and issubclass(tree[-1], Return):
+            return_ = tree.pop()
         
         for field in tree:
-            if isinstance(field, type) and issubclass(field, Computed):
-                raise SyntaxError("Bare non-computed value") # TODO nicer error
+            if isinstance(field, type) and issubclass(field, Return):
+                raise SyntaxError("Return must be last in container") # TODO nicer error
             if isinstance(field, type) and issubclass(field, Primitive):
                 types[field.__name__] = field
             elif isinstance(field, Field):
@@ -1246,7 +1262,7 @@ class TreeToStruct(Transformer):
                 print(tree)
                 raise RuntimeError(f"Internal error: unknown container field {field}")
         
-        return Container.new("Container", _contents=struct, _types=types, _computed_value=computed_value)
+        return Container.new("Container", _contents=struct, _types=types, _return=return_)
     
     def type_pipe(self, tree):
         left_type, right_type = tree
@@ -1316,10 +1332,10 @@ class TreeToStruct(Transformer):
         
         return (name, Computed.new(name, _expr=value))
     
-    def bare_equ_field(self, f):
-        value = f[0]
+    def return_field(self, f):
+        expr = f[0]
         
-        return Computed.new("Computed", _expr=value)
+        return Return.new("Return", _expr=expr)
     
     def if_field(self, f):
         computed = Computed.new("IfCondition", _expr=f[0][4:])
@@ -1461,6 +1477,6 @@ if __name__ == "__main__":
     
     result = parse(open(STRUCTF), open(FILEF, "rb"))
     
-    print(result)
+    print(result._pretty_repr())
     #print(yaml.dump(result._python_value()))
     #print(yaml.dump(result))

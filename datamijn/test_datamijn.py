@@ -77,50 +77,45 @@ value   [4] :Coord {
     assert type(value).__name__ == "Coord[4]"
 
 def test_array():
-    dm = """Bytes   [6]U8"""
+    dm = """bytes   [6]U8"""
     
     nums = [1, 2, 3, 4, 5, 6]
     result = datamijn.parse(dm, b('010203040506'))
     
-    assert result.Bytes == nums
+    assert result.bytes == nums
     
     # test iteration
-    for Byte, real in zip(result.Bytes, nums):
-        assert Byte == real
+    for byte, real in zip(result.bytes, nums):
+        assert byte == real
 
 def test_nested_array():
-    dm = """Bytes   [2][2][2]U8"""
+    dm = """bytes   [2][2][2]U8"""
     
     result = datamijn.parse(dm, b('0102030405060708'))
-    assert result.Bytes[0][0] == [1, 2]
-    assert result.Bytes[0][1] == [3, 4]
-    assert result.Bytes[1][0] == [5, 6]
-    assert result.Bytes[1][1] == [7, 8]
+    assert result.bytes[0][0] == [1, 2]
+    assert result.bytes[0][1] == [3, 4]
+    assert result.bytes[1][0] == [5, 6]
+    assert result.bytes[1][1] == [7, 8]
 
 
 def test_array_inline_typedef():
     dm = """
-Bytes   [2]{
+bytes   [2]{
     a   U8
     b   U8
 }"""
     
     result = datamijn.parse(dm, b('01020304'))
-    assert result.Bytes[0].a == 1
-    assert result.Bytes[0].b == 2
-    assert result.Bytes[1].a == 3
-    assert result.Bytes[1].b == 4
+    assert result.bytes[0].a == 1
+    assert result.bytes[0].b == 2
+    assert result.bytes[1].a == 3
+    assert result.bytes[1].b == 4
 
 
 def test_array_hex():
-    dm = "Bytes [0xff]U8"
+    dm = "bytes [0xff]U8"
     result = datamijn.parse(dm, b('01')*0xff)
-    assert len(result.Bytes) == 0xff
-
-def test_equ():
-    dm = "test  = 5"
-    result = datamijn.parse(dm, b'')
-    assert result.test == 5
+    assert len(result.bytes) == 0xff
 
 def test_expr():
     dm = """
@@ -130,7 +125,7 @@ ten         five * 2
 one         five / five
 twenty      five * (3 + one)
 
-Byte_plus_one U8 + 1
+byte_plus_one U8 + 1
 """
     result = datamijn.parse(dm, b('0e'))
     assert result.five == 5
@@ -139,15 +134,15 @@ Byte_plus_one U8 + 1
     assert result.one == 1
     assert result.twenty == 20
     
-    assert result.Byte_plus_one == 0xf
+    assert result.byte_plus_one == 0xf
 
 def test_array_dynamic():
     dm = """
-count   = 2
-Bytes   [count]U8
+count   2
+bytes   [count]U8
 """
     result = datamijn.parse(dm, b('aabb'))
-    assert result.Bytes == [0xaa, 0xbb]
+    assert result.bytes == [0xaa, 0xbb]
 
 def test_container_computed_value():
     dm = """
@@ -171,23 +166,23 @@ test    {
     = 2
 }
 
-Bytes    [test] U8
+bytes    [test] U8
 nested {
-    Bytes2 [test]U8
+    bytes2 [test]U8
 }
 """
     result = datamijn.parse(dm, b("aabbccdd"))
     assert result.test == 2
-    assert result.Bytes == [0xaa, 0xbb]
-    assert result.nested.Bytes2 == [0xcc, 0xdd]
+    assert result.bytes == [0xaa, 0xbb]
+    assert result.nested.bytes2 == [0xcc, 0xdd]
 
 @pytest.mark.parametrize("test_hex", [True, False])
 def test_pointer(test_hex):
     ptr = "0x0a" if test_hex else "10"
-    db = f"pointed_Byte @{ptr} U8"
+    db = f"pointed_byte @{ptr} U8"
     result = datamijn.parse(db, b('00')*10 + b('01'))
-    assert result.pointed_Byte == 1
-    assert result.pointed_Byte._data.address == 10
+    assert result.pointed_byte == 1
+    assert result.pointed_byte._data.address == 10
 
 def test_dynamic_pointer():
     db = """
@@ -225,11 +220,11 @@ test    {
     = 1
 }
 
-Byte    @test U8
+byte    @test U8
 """
     result = datamijn.parse(dm, b("00aa"))
     assert result.test == 1
-    assert result.Byte == 0xaa
+    assert result.byte == 0xaa
 
 def test_void_type():
     dm = """
@@ -270,7 +265,7 @@ def test_match_default_name():
 test        U8 match {
     0 => :Zero
     1 => :One
-    x => =x
+    x => x
 }"""
     result = datamijn.parse(db, b("fe"))
     assert result.test == 0xfe
@@ -352,14 +347,14 @@ def test_bits():
 }
 
 bits            SomeBits
-following_Byte  U8
+following_byte  U8
 """
     result = datamijn.parse(dm, b("0744"))
     assert result.bits.a == 1
     assert result.bits.b == 1
     assert result.bits.two == [1, 0]
     assert result.bits.rest == 0
-    assert result.following_Byte == 0x44
+    assert result.following_byte == 0x44
 
 def test_bit_type():
     dm = """
@@ -370,7 +365,7 @@ bits    Bits
     result = datamijn.parse(dm, b("aa"))
     assert result.bits == [0, 1, 0, 1, 0, 1, 0, 1]
 
-def test_bit_Byte_boundary():
+def test_bit_byte_boundary():
     dm = """
 cards   [60]B9
 """
@@ -406,18 +401,6 @@ test1       U8
     assert result.test0 == 0
     assert result.test1 == 1
 
-def test_eval():
-    dm = """
-Byte            U8
-one             = 1
-Byte_plus_one   = Byte + one
-"""
-    
-    result = datamijn.parse(dm, b("05"))
-    assert result.Byte == 5
-    assert result.one == 1
-    assert result.Byte_plus_one == 6
-
 
 def test_zero_terminated_array():
     dm = """
@@ -431,7 +414,10 @@ def test_terminated_array():
     dm = """
 numbers         [] {
     number      U8
-    = _terminator if number == 0xff else number
+    = number match {
+        0xff    => Terminator
+        _       => number
+    }
 }
 """
     result = datamijn.parse(dm, b("000102ff"))
@@ -532,14 +518,14 @@ stuff   [5]Thing
 
 def test_Byte():
     dm = """
-Byte1    Byte
-Byte2    Byte
-Bytes    [4]Byte
+byte1    Byte
+byte2    Byte
+bytes    [4]Byte
 """
     result = datamijn.parse(dm, b"a\xe3TEST")
-    assert result.Byte1 == b"a"
-    assert result.Byte2 == b"\xe3"
-    assert result.Bytes == b"TEST"
+    assert result.byte1 == b"a"
+    assert result.byte2 == b"\xe3"
+    assert result.bytes == b"TEST"
 
 def test_Byte_pipe():
     dm = """
@@ -564,9 +550,9 @@ bits     Byte | {
 def test_pipebuffer():
     dm = """
 stuff     {
-    Bytes          [4]Byte
-    repeat_Bytes   |@-2 [6]Byte
-    =Bytes + repeat_Bytes
+    bytes          [4]Byte
+    repeat_bytes   |@-2 [6]Byte
+    = bytes + repeat_bytes
 } | [10]U8
 """
     result = datamijn.parse(dm, b("01020304"))
@@ -683,9 +669,9 @@ stuff[].b   [4]U8
 
 def test_pos():
     dm = """
-pos0        = _pos
+pos0        Pos
 short       U16
-pos1        = _pos
+pos1        Pos
 """
     result = datamijn.parse(dm, b("aaaa"))
     assert result.pos0 == 0
@@ -806,7 +792,7 @@ foo {
 def test_rgb_color():
     dm = """
 :MyColor Short | {
-    _max  = 31
+    _max  31
     r     B5
     g     B5
     b     B5
@@ -828,10 +814,10 @@ pal MyPalette
 def test_if():
     dm = """
 !if 1 {
-    true = 1
+    true    1
 }
 !if 0 {
-    false = 1
+    false   1
 }
 """
     result = datamijn.parse(dm, b"")
@@ -842,9 +828,9 @@ def test_if():
 def test_if_else():
     dm = """
 !if 1 {
-    true = 1
+    true    1
 }!else {
-    false = 1
+    false   1
 }
 """
     result = datamijn.parse(dm, b"")
@@ -855,15 +841,15 @@ def test_if_else():
 def test_if_else_overlap():
     dm = """
 !if 1 {
-    a = 1
-    b = 1
-    c = 1
+    a   1
+    b   1
+    c   1
 }!else {
-    x = 0
-    a = 0
-    y = 0
-    c = 0
-    z = 0
+    x   0
+    a   0
+    y   0
+    c   0
+    z   0
 }
 """
     result = datamijn.parse(dm, b"")
@@ -878,11 +864,11 @@ def test_if_else_overlap():
 def test_if_else_cross():
     dm = """
 !if 0 {
-    x = 1
-    y = 1
+    x   1
+    y   1
 }!else {
-    y = 0
-    x = 0
+    y   0
+    x   0
 }
 """
     result = datamijn.parse(dm, b"")
@@ -1064,7 +1050,7 @@ def test_complex():
 def test_cleanup():
     dm = """
 :A {
-    Byte    U8
+    byte    U8
 }
 
 a A"""

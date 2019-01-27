@@ -19,9 +19,6 @@ string: STRING_DBL -> string
 
 expr: EXPR -> eval
 
-ctx_expr: /=(.+)/          -> ctx_expr
-ctx_expr_par: /{=([^}]+)}/      -> ctx_expr_par
-
 ctx_name: NAME             -> ctx_name
 
 match_key: expr "=>"       -> match_key_int
@@ -32,11 +29,8 @@ match_key: expr "=>"       -> match_key_int
 
 stringtype: string         -> stringtype
 
-match_expr: ctx_expr -> match_expr
-
 match_field: match_key? type       _NL+  -> match_field
     |        match_key? stringtype _NL+  -> match_field
-    |        match_key? match_expr _NL+  -> match_field
 
 match: "match" "{" _NL match_field+ "}"   -> match
 
@@ -67,8 +61,6 @@ type:   expr1               -> type
     | expr4 "char" match     -> type_char_match
     | "<" expr4              -> type_yield
     | expr4 "->" field_name  -> type_foreign_key
-//    | expr4 "|" expr5        -> type_pipe
-//    | ctx_expr_par           -> type_equ
 
 expr5: NAME                  -> expr_name
     | container              -> type_container
@@ -90,8 +82,7 @@ field_name: NAME                    -> field_name
     | field_name "[]." field_name   -> field_name_array
     | "_"                           -> field_name_underscore
 
-field: field_name ctx_expr _NL+           -> equ_field
-     | ctx_expr _NL+                      -> bare_equ_field
+field: "=" type _NL+                      -> return_field
      | field_name field_params type _NL+  -> instance_field
      | typedef _NL+                       -> typedef_field
      | /\!if ([^\{]+)/ container ("!else" container)? _NL+ -> if_field
