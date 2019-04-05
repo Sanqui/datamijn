@@ -7,6 +7,10 @@ from codecs import decode
 def b(string):
     return decode(string.replace(" ", ""), 'hex')
 
+
+def test_stdlib():
+    result = datamijn.parse("", b"")
+
 @pytest.mark.parametrize("type,data,value", [
     ("U8",  b('01'), 1),
     ("U16", b('0102'), 0x0201),
@@ -74,7 +78,7 @@ value   [4] :Coord {
     assert value[3].y == 0x31
     assert type(value[0]).__name__ == "Coord"
     assert value._type.__name__ == "Coord"
-    assert type(value).__name__ == "Coord[4]"
+    assert type(value).__name__ == "[4]Coord"
 
 def test_array():
     dm = """bytes   [6]U8"""
@@ -136,6 +140,47 @@ byte_plus_one U8 + 1
     
     assert result.byte_plus_one == 0xf
 
+def test_expr_overwrite():
+    dm = """
+five        5
+x           five + 1
+x           x + 1
+"""
+    result = datamijn.parse(dm, b('00'))
+    assert result.x == 7
+
+def test_expr_attr_access():
+    dm = """
+foo {
+    bar     10
+}
+
+refoo {
+    bar     foo.bar
+}
+"""
+    result = datamijn.parse(dm, b(''))
+    
+    assert result.foo.bar == 10
+    assert result.refoo.bar == 10
+
+def test_expr_indexing():
+    dm = """
+foo [10]{
+    bar     10
+}
+
+refoo [10]{
+    bar     foo[I].bar
+}
+"""
+    result = datamijn.parse(dm, b(''))
+    
+    assert result.foo[0].bar == 10
+    assert result.foo[9].bar == 10
+    assert result.refoo[0].bar == 10
+    assert result.refoo[9].bar == 10
+
 def test_array_dynamic():
     dm = """
 count   2
@@ -157,7 +202,7 @@ array   [2]Test
     #assert result.test.x == 0xaa
     assert result.array[0] == 2
     assert result.array[1] == 4
-    assert issubclass(result.array._type, int)
+    #assert issubclass(result.array._type, int)
 
 
 def test_array_computed():
@@ -196,7 +241,7 @@ val     @val_ptr U8
 def test_dynamic_pointer_complex():
     db = """
 val_ptr [1]U8
-val     @_root.val_ptr[0] U8
+val     @(val_ptr[0]) U8
 """
     data = b('0102')
     result = datamijn.parse(db, data)
@@ -891,7 +936,7 @@ Byte        U8
 def test_type_name_error():
     dm = "something     NoExist"
     
-    with pytest.raises(NameError):
+    with pytest.raises(datamijn.ResolveError):
         result = datamijn.parse(dm, b"")
 
 def test_resolve_parent_type():
@@ -993,7 +1038,7 @@ def test_save_pics_paletted(tmpdir):
 palettes [5][2]GBColor
 pics    [5]{
     pic     [2][2]Tile1BPP
-    = pic | palettes[_i]
+    = pic | palettes[I]
 }
 !save pics
 """)
@@ -1005,8 +1050,8 @@ pics    [5]{
 def test_save_pics_paletted_array_pipe(tmpdir):
     tmpdir.join("test.dm").write("""
 palettes [5][2]GBColor
-pics     [5][2][2]Tile1BPP
-pics     = pics | palettes
+_pics     [5][2][2]Tile1BPP
+pics     _pics | palettes
 !save pics
 """)
     
@@ -1016,21 +1061,21 @@ pics     = pics | palettes
 
 def test_save_pics_paletted_dict_pipe(tmpdir):
     tmpdir.join("test.dm").write("""
-palettes {
+_palettes {
     foo     [2]GBColor
     bar     [2]GBColor
     nested {
         baz [2]GBColor
     }
 }
-pics     {
+_pics     {
     foo     [2][2]Tile1BPP
     bar     [2][2]Tile1BPP
     nested {
         baz [2][2]Tile1BPP
     }
 }
-pics     = pics | palettes
+pics     _pics | _palettes
 !save pics
 """)
     
@@ -1056,7 +1101,7 @@ def test_cleanup():
 a A"""
     result = datamijn.parse(dm, b"\x00")
     
-    with pytest.raises(NameError):
+    with pytest.raises(datamijn.ResolveError):
         dm2 = "a A"
         result = datamijn.parse(dm2, b"\x00")
 

@@ -20,6 +20,28 @@ import png
 
 UPPERCASE = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
+def full_type_name(type):
+    IGNORE_BASES = (object, )
+    name = type.__name__
+    basenames = ", ".join(base.__name__ for base in type.__bases__ if base not in IGNORE_BASES)
+    if basenames:
+        name += f" ({basenames})"
+    
+    return name
+
+class DatamijnPathError(Exception):
+    def __init__(self, path, message):
+        pathstr = '.'.join(str(x) for x in path)
+        if not pathstr:
+            pathstr = "(root)"
+        message = f"{message}\nPath: {pathstr}"
+    
+        super().__init__(message)
+
+class ResolveError(DatamijnPathError): pass
+
+class ParseError(DatamijnPathError): pass
+
 class IOWithBits(BufferedIOBase):
     def __init__(self, *args, **kvargs):
         super().__init__(*args, **kvargs)
@@ -101,11 +123,19 @@ class Primitive():
         return self
     
     @classmethod
-    def get_final_type(self):
+    def infer_type(self):
         if self._final_type != None and self._final_type != self:
-            return self._final_type.get_final_type()
+            if issubclass(self._final_type, Primitive):
+                return self._final_type.infer_type()
+            else:
+                return self._final_type
         else:
             return self
+    
+    @classmethod
+    def _or_type(self, other):
+        print("default _or_type")
+        return None
     
     def _save(self, ctx, path):
         raise NotImplementedError()
@@ -261,7 +291,7 @@ class Byte(Primitive, bytes):
     def parse_stream(self, stream, ctx, path, index=None, **kwargs):
         read = stream.read(1)
         if len(read) != self._size:
-            raise Exception(f"Failed to read stream\nPath: {'.'.join(str(x) for x in path)}")
+            raise ParseError(path, "Failed to read stream")
         return self(read)
 
 class Short(Primitive, bytes):
@@ -270,7 +300,7 @@ class Short(Primitive, bytes):
     def parse_stream(self, stream, ctx, path, index=None, **kwargs):
         read = stream.read(2)[::-1]
         if len(read) != self._size:
-            raise Exception(f"Failed to read stream\nPath: {'.'.join(str(x) for x in path)}")
+            raise ParseError(path, "Failed to read stream")
         return self(read)
 
 class Word(Primitive, bytes):
@@ -279,7 +309,7 @@ class Word(Primitive, bytes):
     def parse_stream(self, stream, ctx, path, index=None, **kwargs):
         read = stream.read(4)[::-1]
         if len(read) != self._size:
-            raise Exception(f"Failed to read stream\nPath: {'.'.join(str(x) for x in path)}")
+            raise ParseError(path, "Failed to read stream")
         return self(read)
 
 class B1(Primitive, int):
@@ -333,7 +363,7 @@ class U32(Primitive):
     _size = 4
     pass
 
-class Array(list, Primitive):
+class Array(Primitive):
     # _type
     # _length
     _concat = False
@@ -353,26 +383,37 @@ class Array(list, Primitive):
                 self._length = self._length.parse_stream(None, None, path)
         self._type = self._type.resolve(ctx, path)
         
+        match = None
         for elem_types, new_class in ARRAY_CLASSES.items():
-            match = False
+            match = None
             cur_type = self
             for elem_type in elem_types:
-                if issubclass(cur_type.get_final_type()._type.get_final_type(), elem_type):
+                if hasattr(cur_type.infer_type(), "_type") \
+                  and issubclass(cur_type.infer_type()._type.infer_type(), elem_type):
                     cur_type = cur_type._type
-                    match = True
+                    match = new_class
                 else:
-                    match = False
-            
+                    match = None
             if match:
-                return new_class.new(f"{self._type.__name__}{new_class.__name__}[{self._length}]", _type=self._type, _length=self._length)
+                break
         
-        self.__name__ = f"{self._type.__name__}[{self._length if isinstance(self._length, int) else ''}]"
-        return self
+        if match:
+            name = f"[{self._length}]{self._type.__name__}{match.__name__}"
+        else:
+            match = ListArray
+            name = f"[{self._length}]{self._type.__name__}"
+        
+        new = match.new(name, _type=self._type, _length=self._length)
+        #final = self._type.infer_type()
+        #new._final_type = Array.new(f"[]{final.__name__}", _type=final)
+        #new._final_type.resolve(ctx, path + ["(final)"])
+        return new
+        
     
     @classmethod
     def size(self):
         if isinstance(self._length, int):
-            return self._length * self._type.get_final_type().size()
+            return self._length * self._type.infer_type().size()
         else:
             return None
     
@@ -413,8 +454,9 @@ class Array(list, Primitive):
         
         # XXX This sucks, but it's the price for computed values.
         # Hopefully we can get rid of it one day
-        if issubclass(self._type, Container) and self._type._return != None and len(contents) > 0:
-            self._type = type(contents[0])
+        #if issubclass(self._type, Container) and self._type._return != None and len(contents) > 0:
+        #    self._type = type(contents[0])
+        #self._type = self._type.infer_type()
         
         if self._bytestring or len(contents) and isinstance(contents[0], bytes):
             return b"".join(contents)
@@ -425,12 +467,18 @@ class Array(list, Primitive):
         if not isinstance(other, Array):
             return NotImplemented
         # XXX well whadd'ya think, I'm matching names...
-        #if self._type.get_final_type().__name__ != other._type.get_final_type().__name__:
-        #    raise TypeError(f"Added arrays must be of matching subtype ({self._type.get_final_type().__name__} != {other._type.get_final_type().__name__})")
+        #if self._type.infer_type().__name__ != other._type.infer_type().__name__:
+        #    raise TypeError(f"Added arrays must be of matching subtype ({self._type.infer_type().__name__} != {other._type.infer_type().__name__})")
 
         # just pray
         
         return type(self)(list(self) + list(other))
+    
+    @classmethod
+    def _or_type(self, other):
+        if issubclass(other, Array):
+            return self._type._or_type(other._type)
+        return None
     
     def __or__(self, other):
         if len(self) != len(other):
@@ -451,8 +499,11 @@ class Array(list, Primitive):
     def _save(self, ctx, path):
         for i, elem in enumerate(self):
             elem._save(ctx, path + [i])
-    
-class String(Array):
+
+class ListArray(list, Array):
+    pass
+
+class String(ListArray):
     _concat = True
     
     def __str__(self):
@@ -467,12 +518,12 @@ class String(Array):
         
         return string
 
-class ByteString(Array):
+class ByteString(bytes, Array):
     _concat = True
     _bytestring = True
     
 
-class Tileset(Array):
+class Tileset(ListArray):
     def _save(self, ctx, path):
         palette = getattr(self, "_palette", None)
         if issubclass(self._type, Tile):
@@ -515,6 +566,13 @@ class Tileset(Array):
         else:
             raise NotImplementedError()
     
+    @classmethod
+    def _or_type(self, other):
+        if issubclass(other, Palette):
+            return Image
+        else:
+            return None
+    
     def __or__(self, other):
         if isinstance(other, Palette):
             image = Image(self)
@@ -530,7 +588,7 @@ class Tileset(Array):
 class Image(Tileset):
     pass
 
-class Palette(Array, PipedPrimitive):
+class Palette(ListArray, PipedPrimitive):
     def eightbit(self):
         colors = []
         for color in self:
@@ -556,7 +614,7 @@ class Container(dict, Primitive):
         
         for name, type_ in self._types.items():
             if name[0] not in UPPERCASE + "!":
-                raise Exception(f"{name}: Type names must start with an uppercase letter.")
+                raise ResolveError(path, f"{name}: Type names must start with an uppercase letter.")
             resolved = type_.resolve(ctx + [new_types], path + [name])
             if resolved._embed:
                 new_types.update(resolved._types)
@@ -566,16 +624,34 @@ class Container(dict, Primitive):
         self._types.update(new_types)
         
         contents = []
+        contents_dict = {}
+        
+        yields = None
         
         for name, type_ in self._contents:
             if name and isinstance(name, str) and name[0] in UPPERCASE:
-                raise Exception(f"{name}: Field names must start with a lowercase letter.")
-            contents.append((name, type_.resolve(ctx, path + [name])))
+                raise ResolveError(path, f"{name}: Field names must start with a lowercase letter.")
+            resolved = type_.resolve(ctx, path + [name])
+            
+            if name and name in contents_dict and contents_dict[name].infer_type() != resolved.infer_type():
+                raise ResolveError(path, f"Field {name} is redefined with a different type.\n{full_type_name(contents_dict[name].infer_type())} != {full_type_name(resolved.infer_type())}")
+            
+            if not isinstance(resolved, Field) and issubclass(resolved, Yield):
+                if yields is None:
+                    yields = resolved._type.infer_type()
+                if yields != resolved._type.infer_type():
+                    raise ResolveError(path, f"Container yields different types.")
+                    # XXX maybe containers should only be able to yield bytes, anyway...
+            
+            contents.append((name, resolved))
+            contents_dict[name] = resolved
         
+        self._yields = yields
         self._contents = contents
         
         if self._return:
             self._return = self._return.resolve(ctx, path + ["_return"])
+            self._final_type = self._return.infer_type()
         
         ctx.pop()
         
@@ -649,6 +725,18 @@ class Container(dict, Primitive):
         else:
             raise AttributeError()
     
+    @classmethod
+    def _or_type(self, other):
+        if not issubclass(other, Container):
+            return None
+        if set(n for n, t in self._contents if not n.startswith("_")) != set(n for n, t in other._contents if not n.startswith("_")):
+            raise TypeError(f"Piped containers must have matching fields")
+        
+        # TODO this should return a properly piped type of the result!!!!! XXX
+        
+        return self
+        
+    
     def __or__(self, other):
         if not isinstance(other, Container):
             return NotImplemented
@@ -716,9 +804,28 @@ class ExprName(Primitive):
                     if self._name in context._types:
                         return context._types[self._name].resolve(ctx, path)
             
-            context = ".".join(str(x) for x in path)
-            raise NameError(f"Cannot resolve type {self._name}, path: {context}")
+            raise ResolveError(path, f"Cannot resolve type {self._name}")
         else:
+            # This is a reference!
+            final_type = None
+            for context in reversed(ctx):
+                if isinstance(context, dict):
+                    if self._name in context:
+                        final_type = context[self._name]
+                        break
+                else:
+                    for name, type_ in context._contents:
+                        if name == self._name:
+                            final_type = type_
+                            break
+                if final_type:
+                    break
+            
+            if final_type == None:
+                raise ResolveError(path, f"Cannot resolve name {self._name}")
+            
+            self._final_type = final_type.infer_type()
+            
             return self
 
     @classmethod
@@ -727,12 +834,12 @@ class ExprName(Primitive):
             if self._name in context:
                 return context[self._name]
         
-        pathstr = ".".join(str(x) for x in path)
-        raise NameError(f"Cannot resolve name {self._name}, path: {pathstr}")
+        raise ParseError(path, f"Cannot resolve name {self._name}")
 
-class ExprNum(Primitive):
+class ExprInt(Primitive):
     _final = True
-    #_num
+    _final_type = int
+    #_int
     
     @classmethod
     def resolve(self, ctx, path):
@@ -740,7 +847,7 @@ class ExprNum(Primitive):
     
     @classmethod
     def parse_stream(self, stream, ctx, path, index=None, **kwargs):
-        return self._num
+        return self._int
 
 class Expr(Primitive):
     #_left
@@ -752,6 +859,27 @@ class Expr(Primitive):
         self._left = self._left.resolve(ctx, path)
         self._right = self._right.resolve(ctx, path)
         self._final = self._left._final and self._right._final
+        
+        type_func_name = f'_{self._op.__name__.rstrip("_")}_type'
+        
+        transformed_type = None
+        if hasattr(self._left.infer_type(), type_func_name):
+            transformed_type = getattr(self._left.infer_type(), type_func_name)(self._right.infer_type())
+        
+        if self._left.infer_type() != self._right.infer_type() \
+            and not issubclass(self._left.infer_type(), self._right.infer_type()) \
+            and not issubclass(self._right.infer_type(), self._left.infer_type()) \
+            and not (
+              issubclass(self._left.infer_type(), Array) \
+              and issubclass(self._right.infer_type(), Array) \
+              and self._left.infer_type()._type.infer_type() == self._right.infer_type()._type.infer_type()
+            ) and not transformed_type:
+                raise ResolveError(path, f"Both types in an `{self._op.__name__}` expression have to match or be compatible.\n{full_type_name(self._left.infer_type())} != {full_type_name(self._right.infer_type())}")
+        
+        if transformed_type:
+            self._final_type = transformed_type
+        else:
+            self._final_type = self._left.infer_type()
         return self
     
     @classmethod
@@ -760,12 +888,50 @@ class Expr(Primitive):
         right = self._right.parse_stream(stream, ctx, path, index=index, **kwargs)
         return self._op(left, right)
 
+class ExprAttr(Primitive):
+    #_left
+    #_name
+    @classmethod
+    def resolve(self, ctx, path):
+        self._left = self._left.resolve(ctx, path)
+        if not issubclass(self._left.infer_type(), Container):
+            raise ResolveError(path, f"Only containers may be attributed, not {full_type_name(self._left.infer_type())}.")
+        
+        self._final_type = dict(self._left.infer_type()._contents)[self._name].infer_type()
+        return self
+    
+    @classmethod
+    def parse_stream(self, stream, ctx, path, index=None, **kwargs):
+        left = self._left.parse_stream(stream, ctx, path, index=index, **kwargs)
+        return left[self._name]
+
+class ExprIndex(Primitive):
+    #_left
+    #_index
+    @classmethod
+    def resolve(self, ctx, path):
+        self._left = self._left.resolve(ctx, path)
+        if not issubclass(self._left.infer_type(), Array):
+            raise ResolveError(path, f"Only arrays may be indexed, not {full_type_name(self._left.infer_type())}.")
+        if not issubclass(self._index.infer_type(), int):
+            raise ResolveError(path, f"Only ints may be used for indexing, not {full_type_name(self._index.infer_type())}.")
+        
+        self._final_type = self._left.infer_type()._type
+        return self
+    
+    @classmethod
+    def parse_stream(self, stream, ctx, path, index=None, **kwargs):
+        left = self._left.parse_stream(stream, ctx, path, index=index, **kwargs)
+        index = self._index.parse_stream(stream, ctx, path, index=index, **kwargs)
+        return left[index]
+
 class Return(Primitive):
     #_expr
     
     @classmethod
     def resolve(self, ctx, path):
         self._expr = self._expr.resolve(ctx, path)
+        self._final_type = self._expr.infer_type()
         self._final = self._expr._final
         return self
     
@@ -774,11 +940,15 @@ class Return(Primitive):
         return self._expr.parse_stream(stream, ctx, path, index=index, **kwargs)
 
 class Index(Primitive):
+    _final_type = int
+    
     @classmethod
     def parse_stream(self, stream, ctx, path, index=None, **kwargs):
         return index
 
 class Position(Primitive):
+    _final_type = int
+    
     @classmethod
     def parse_stream(self, stream, ctx, path, index=None, **kwargs):
         return stream.tell()
@@ -822,33 +992,39 @@ class ExprType(Primitive):
 
 # XXX this doesn't work as a class type - OK?
 class Pointer(Primitive):
-    def __init__(self, inner, address_expr):
-        self.inner = inner
-        self.address_expr = address_expr
+    #_type
+    #_addr
     
+    @classmethod
     def resolve(self, ctx, path):
-        self.inner = self.inner.resolve(ctx, path)
+        self._type = self._type.resolve(ctx, path)
+        self._addr = self._addr.resolve(ctx, path + ["(addr)"])
+        if not issubclass(self._addr.infer_type(), int):
+            raise ResolveError(path, f"Address must resolve to int.\n{self._addr.__name__} resolves to {full_type_name(self._addr.infer_type())}.\nHINT: This could be a syntax ambiguity.  If you intend to index or attribute in your address expression, make sure to put it in parenthesis!")
+        self._final_type = self._type.infer_type()
         return self
     
-    def parse_stream(self, stream, ctx, path, index=None, **kwargs):
-        address = eval_with_ctx(self.address_expr, ctx)
+    @classmethod
+    def parse_stream(self, stream, ctx, path, **kwargs):
+        address = self._addr.parse_stream(stream, ctx, path + ['(addr)'], **kwargs)
         pos = stream.tell()
         stream.seek(address)
-        obj = self.inner.parse_stream(stream, ctx, path, **kwargs)
+        result = self._type.parse_stream(stream, ctx, path, **kwargs)
         stream.seek(pos)
-        return obj
+        return result
 
 class PipePointer(Pointer):
-    def parse_stream(self, stream, ctx, path, index=None, pipebuffer=None, **kwargs):
-        address = eval_with_ctx(self.address_expr, ctx)
+    @classmethod
+    def parse_stream(self, stream, ctx, path, pipebuffer=None, **kwargs):
+        address = self._addr.parse_stream(stream, ctx, path + ['(addr)'], **kwargs)
         pos = pipebuffer.tell()
         if address < 0:
             pipebuffer.seek(address, 2)
         else:
             pipebuffer.seek(address)
-        obj = self.inner.parse_stream(pipebuffer, ctx, path, **kwargs)
+        result = self._type.parse_stream(pipebuffer, ctx, path, pipebuffer=None, **kwargs)
         pipebuffer.seek(pos)
-        return obj
+        return result
 
 class Yield(Primitive):
     _yields = True
@@ -895,7 +1071,11 @@ class MatchType(Primitive, metaclass=MatchTypeMetaclass):
             if isinstance(v, type) and issubclass(v, Primitive)}
         self._type = self._type.resolve(ctx, path)
         for key, value in self._match.items():
+            if isinstance(key, str):
+                ctx.append({key: self._type})
             self._match[key] = value.resolve(ctx, path + [key])
+            if isinstance(key, str):
+                ctx.pop()
         
         # minor optimization
         self._ranges = {}
@@ -909,7 +1089,7 @@ class MatchType(Primitive, metaclass=MatchTypeMetaclass):
         return self
     
     @classmethod
-    def get_final_type(self):
+    def infer_type(self):
         final_type = None
         for type_ in self._match.values():
             if final_type == None:
@@ -954,6 +1134,13 @@ class PipeStream(IOWithBits):
         self._bit_number = None
         self._pos = 0
         self._free_bytes = 0
+        
+        if not issubclass(type_.infer_type(), bytes):
+            if issubclass(type_, Container):
+                if not type_._yields:
+                    raise TypeError(f"Attempting to pipe {full_type_name(type_.infer_type())}, which is a Container that does not yield.")
+            else:
+                raise TypeError(f"Attempting to pipe {full_type_name(type_.infer_type())}")
     
     def read(self, num):
         self._buffer.seek(0, 2) # SEEK_END
@@ -1001,6 +1188,14 @@ class Pipe(Primitive):
     def resolve(self, ctx, path):
         self._left_type = self._left_type.resolve(ctx, path + ["(left)"])
         self._right_type = self._right_type.resolve(ctx, path + ["(right)"])
+        if not self._left_type._yields \
+          and not issubclass(self._left_type.infer_type(), ByteString) \
+          and hasattr(self._left_type.infer_type(), "__or__") \
+          and not issubclass(self._right_type, PipedPrimitive):
+            expr = Expr.new(f"(| {self._left_type.__name__} {self._right_type.__name__})",
+                _left=self._left_type, _right=self._right_type, _op=operator.or_)
+            return expr.resolve(ctx, path)
+        
         self._final_type = self._right_type
         
         self.__name__ = f"{self._left_type.__name__}|{self._right_type.__name__}"
@@ -1269,12 +1464,22 @@ class TreeToStruct(Transformer):
         return Pipe.new(f"{left_type.__name__}|{right_type.__name__}",
             _left_type=left_type, _right_type=right_type)
     
+    def expr_attr(self, tree):
+        left, name = tree
+        return ExprAttr.new(f"({left.__name__}).{name}",
+            _left=left, _name=name)
+    
+    def expr_index(self, tree):
+        left, index = tree
+        return ExprIndex.new(f"({left.__name__})[{index.__name__}]",
+            _left=left, _index=index)
+    
     def expr_infix(self, tree):
         OPERATIONS = {
             "+": operator.add,
             "-": operator.sub,
             "*": operator.mul,
-            "/": operator.floordiv
+            "/": operator.floordiv,
         }
         left, sign, right = tree
         return Expr.new(f"({sign} {left.__name__} {right.__name__})",
@@ -1365,15 +1570,15 @@ class TreeToStruct(Transformer):
         return (None, Yield.new("Yield", _type=type))
     
     def expr_name(self, f):
-        name = f[0]
+        name = str(f[0])
         if name in primitive_types:
             return primitive_types[name]
         else:
             return ExprName.new(f"{name}", _name=name)
     
-    def expr_num(self, f):
+    def expr_int(self, f):
         num = eval(f[0])
-        return ExprNum.new(f"{num}", _num=num)
+        return ExprInt.new(f"{num}", _int=num)
     
     def type_typedef(self, f):
         return f[0]
@@ -1387,23 +1592,23 @@ class TreeToStruct(Transformer):
             count = count_tree.children[0]
         else:
             count = None
-        return Array.new(f"{type_.__name__}[]", _type=type_, _length=count)
+        return Array.new(f"[]{type_.__name__}", _type=type_, _length=count)
+    
+    def expr_ptr(self, f):
+        addr = f[0]
+        type_ = f[1]
+        return Pointer.new(f"@({addr.__name__})({type_.__name__})", _addr=addr, _type=type_)
+    
+    def expr_pipeptr(self, f):
+        addr = f[0]
+        type_ = f[1]
+        return PipePointer.new(f"|@({addr.__name__})({type_.__name__})", _addr=addr, _type=type_)
     
     def instance_field(self, f):
         name = f[0]
-        params = f[1]
-        type_ = f[2]
+        type_ = f[1]
         
-        field = type_
-        for param in params.children:
-            if param.data == "pointer":
-                field = Pointer(field, param.children[0][1:])
-            elif param.data == "pipepointer":
-                field = PipePointer(field, param.children[0][2:])
-            else:
-                raise ValueError(f"Unknown param type: {param.data}")
-        
-        return (name, field)
+        return (name, type_)
     
     def typedef_field(self, f):
         return f[0]

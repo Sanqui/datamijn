@@ -36,7 +36,7 @@ match: "match" "{" _NL match_field+ "}"   -> match
 
 container: "{" _NL+ field* "}" -> container
 
-count: "[" expr1 "]"
+count: "[" expr2 "]"
      | "[" "]"
 
 SIGNSUM: "+" | "-"
@@ -44,35 +44,38 @@ SIGNPRODUCT: "*" | "/"
 
 type:   expr1               -> type
 
-?expr1: expr2
-      | expr1 SIGNSUM expr2 -> expr_infix
+?expr1: expr2               -> type
+    | "@" expr7 expr1        -> expr_ptr
+    | "|@" expr7 expr1       -> expr_pipeptr
+      
 
-?expr2: expr3
-      | expr2 SIGNPRODUCT expr3 -> expr_infix
+?expr2: expr3               -> type
+      | expr2 SIGNSUM expr3 -> expr_infix
 
-?expr3: expr4
-      | expr3 "|" expr4      -> type_pipe
+?expr3: expr4                -> type
+      | expr3 SIGNPRODUCT expr4 -> expr_infix
+      | expr3 ".." expr4    -> expr_infix
 
-?expr4: expr5
-    | ":" NAME expr4         -> typedef
+?expr4: expr5                -> type
+      | expr4 "|" expr5      -> type_pipe
+
+?expr5: expr6                -> type
+    | ":" NAME expr5         -> typedef
     | ":" NAME               -> typedefvoid
-    | count expr4            -> type_count
-    | expr4 match            -> type_match
-    | expr4 "char" match     -> type_char_match
-    | "<" expr4              -> type_yield
-    | expr4 "->" field_name  -> type_foreign_key
+    | count expr5            -> type_count
+    | expr5 match            -> type_match
+    | expr5 "char" match     -> type_char_match
+    | "<" expr5              -> type_yield
+    | expr5 "->" field_name  -> type_foreign_key
 
-expr5: NAME                  -> expr_name
+expr6: expr7                 -> type
+    | expr6 "." NAME         -> expr_attr
+    | expr6 "[" expr1 "]"    -> expr_index
+
+expr7: NAME                  -> expr_name
     | container              -> type_container
-    | NUM                    -> expr_num
+    | NUM                    -> expr_int
     | "(" expr1 ")"          -> expr_bracket
-
-pointer: /@[^ ]*/
-pipepointer: /\|@[^ ]*/
-
-field_params:
-    | pointer
-    | pipepointer
 
 typedef: ":" NAME type              -> typedef
     |    ":" NAME                   -> typedefvoid
@@ -83,7 +86,7 @@ field_name: NAME                    -> field_name
     | "_"                           -> field_name_underscore
 
 field: "=" type _NL+                      -> return_field
-     | field_name field_params type _NL+  -> instance_field
+     | field_name type _NL+               -> instance_field
      | typedef _NL+                       -> typedef_field
      | /\!if ([^\{]+)/ container ("!else" container)? _NL+ -> if_field
      | /\!assert(.*)/ _NL+                -> assert_field

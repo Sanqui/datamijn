@@ -10,7 +10,7 @@
 
 :BytePlusOne {
     _byte        U8
-    _one         = 1
+    _one         1
     
     = _byte + _one
 }
@@ -57,7 +57,7 @@ gfx {
 
 
     :GBColor Short | {
-        _max  = 31
+        _max  31
         r     B5
         g     B5
         b     B5
@@ -67,8 +67,8 @@ gfx {
     
     pal @0 GBPalette
     
-    sanquiderp  @0x200  [0xb][0x10]GBTile
-    sanquiderp = sanquiderp | pal
+    _sanquiderp  @0x200  [0xb][0x10]GBTile
+    sanquiderp  _sanquiderp | pal
     !save sanquiderp
 }
 
