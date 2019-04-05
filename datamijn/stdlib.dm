@@ -8,19 +8,20 @@
 
 :GBPalette [4]GBColor
 
-:GBPalDefault [4] {
+:GBPalDefault [4] ({
     r      (3-I) * (31/3)
     g      (3-I) * (31/3)
     b      (3-I) * (31/3)
     _max  31
-} | RGBColor
+} | RGBColor)
 
-//:GBBankFit {
-//    _right_size = _right.size()
-//    !if (_pos  0x4000) != (_pos + _right_size - 1)0x4000 {
-//        _pad    = 0x4000 - (_pos % 0x4000)
-//        _       [_pad]Byte
-//    }
-//    bytes    [_right_size]Byte
-//    = bytes
-//}
+:GBBankFit {
+    _pos Pos
+    _right_size RightSize
+    !if (_pos // 0x4000) != (_pos + _right_size - 1) // 0x4000 {
+        _pad    0x4000 - (Pos % 0x4000)
+        _       [_pad]Byte
+    }
+    bytes    [RightSize]Byte
+    = bytes
+}

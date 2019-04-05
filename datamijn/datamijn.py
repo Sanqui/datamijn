@@ -293,6 +293,11 @@ class Byte(Primitive, bytes):
         if len(read) != self._size:
             raise ParseError(path, "Failed to read stream")
         return self(read)
+    
+    @classmethod
+    def _mul_type(self, other):
+        if issubclass(other, int):
+            return bytes
 
 class Short(Primitive, bytes):
     _size = 2
@@ -372,6 +377,8 @@ class Array(Primitive):
     def resolve(self, ctx, path):
         ARRAY_CLASSES = {
             (Byte,):            ByteString,
+            (str,):             String,
+            (StringType,):      String,
             (CharMatchType,):   String,
             (Tile,):            Tileset,
             (Tileset, Tile):    Tileset,
@@ -397,13 +404,20 @@ class Array(Primitive):
             if match:
                 break
         
+        length_name = ""
+        if self._length and isinstance(self._length, int):
+            length_name = str(self._length)
+        elif self._length:
+            length_name = self._length.__name__
+        
         if match:
-            name = f"[{self._length}]{self._type.__name__}{match.__name__}"
+            name = f"[{length_name}]{self._type.__name__}{match.__name__}"
         else:
             match = ListArray
-            name = f"[{self._length}]{self._type.__name__}"
+            name = f"[{length_name}]{self._type.__name__}"
         
         new = match.new(name, _type=self._type, _length=self._length)
+        new._yields = self._type._yields
         #final = self._type.infer_type()
         #new._final_type = Array.new(f"[]{final.__name__}", _type=final)
         #new._final_type.resolve(ctx, path + ["(final)"])
@@ -463,17 +477,6 @@ class Array(Primitive):
         else:
             return self(contents)
     
-    def __add__(self, other):
-        if not isinstance(other, Array):
-            return NotImplemented
-        # XXX well whadd'ya think, I'm matching names...
-        #if self._type.infer_type().__name__ != other._type.infer_type().__name__:
-        #    raise TypeError(f"Added arrays must be of matching subtype ({self._type.infer_type().__name__} != {other._type.infer_type().__name__})")
-
-        # just pray
-        
-        return type(self)(list(self) + list(other))
-    
     @classmethod
     def _or_type(self, other):
         if issubclass(other, Array):
@@ -501,7 +504,11 @@ class Array(Primitive):
             elem._save(ctx, path + [i])
 
 class ListArray(list, Array):
-    pass
+    def __add__(self, other):
+        if not isinstance(other, ListArray):
+            return NotImplemented
+        
+        return type(self)(list(self) + list(other))
 
 class String(ListArray):
     _concat = True
@@ -626,8 +633,6 @@ class Container(dict, Primitive):
         contents = []
         contents_dict = {}
         
-        yields = None
-        
         for name, type_ in self._contents:
             if name and isinstance(name, str) and name[0] in UPPERCASE:
                 raise ResolveError(path, f"{name}: Field names must start with a lowercase letter.")
@@ -636,17 +641,12 @@ class Container(dict, Primitive):
             if name and name in contents_dict and contents_dict[name].infer_type() != resolved.infer_type():
                 raise ResolveError(path, f"Field {name} is redefined with a different type.\n{full_type_name(contents_dict[name].infer_type())} != {full_type_name(resolved.infer_type())}")
             
-            if not isinstance(resolved, Field) and issubclass(resolved, Yield):
-                if yields is None:
-                    yields = resolved._type.infer_type()
-                if yields != resolved._type.infer_type():
-                    raise ResolveError(path, f"Container yields different types.")
-                    # XXX maybe containers should only be able to yield bytes, anyway...
+            if resolved._yields:
+                self._yields = True
             
             contents.append((name, resolved))
             contents_dict[name] = resolved
         
-        self._yields = yields
         self._contents = contents
         
         if self._return:
@@ -822,7 +822,10 @@ class ExprName(Primitive):
                     break
             
             if final_type == None:
-                raise ResolveError(path, f"Cannot resolve name {self._name}")
+                error_text = f"Cannot resolve name {self._name}"
+                if self._name in "b1 b2 b4 u8 u16 u32".split():
+                    error_text += f"\nDid you mean {self._name.upper()}?"
+                raise ResolveError(path, error_text)
             
             self._final_type = final_type.infer_type()
             
@@ -872,10 +875,14 @@ class Expr(Primitive):
             and not (
               issubclass(self._left.infer_type(), Array) \
               and issubclass(self._right.infer_type(), Array) \
-              and self._left.infer_type()._type.infer_type() == self._right.infer_type()._type.infer_type()
+              and (
+                self._left.infer_type()._type.infer_type() == self._right.infer_type()._type.infer_type() \
+                or self._left.infer_type()._type.infer_type().__name__ == self._right.infer_type()._type.infer_type().__name__
+              ) # XXX more type string comparison
             ) and not transformed_type:
                 raise ResolveError(path, f"Both types in an `{self._op.__name__}` expression have to match or be compatible.\n{full_type_name(self._left.infer_type())} != {full_type_name(self._right.infer_type())}")
         
+        self._yields = self._left._yields or self._right._yields
         if transformed_type:
             self._final_type = transformed_type
         else:
@@ -897,6 +904,7 @@ class ExprAttr(Primitive):
         if not issubclass(self._left.infer_type(), Container):
             raise ResolveError(path, f"Only containers may be attributed, not {full_type_name(self._left.infer_type())}.")
         
+        self._yields = self._left._yields
         self._final_type = dict(self._left.infer_type()._contents)[self._name].infer_type()
         return self
     
@@ -911,11 +919,13 @@ class ExprIndex(Primitive):
     @classmethod
     def resolve(self, ctx, path):
         self._left = self._left.resolve(ctx, path)
+        self._index = self._index.resolve(ctx, path)
         if not issubclass(self._left.infer_type(), Array):
             raise ResolveError(path, f"Only arrays may be indexed, not {full_type_name(self._left.infer_type())}.")
         if not issubclass(self._index.infer_type(), int):
             raise ResolveError(path, f"Only ints may be used for indexing, not {full_type_name(self._index.infer_type())}.")
         
+        self._yields = self._left._yields or self._index._yields
         self._final_type = self._left.infer_type()._type
         return self
     
@@ -931,6 +941,7 @@ class Return(Primitive):
     @classmethod
     def resolve(self, ctx, path):
         self._expr = self._expr.resolve(ctx, path)
+        self._yields = self._expr._yields
         self._final_type = self._expr.infer_type()
         self._final = self._expr._final
         return self
@@ -952,6 +963,15 @@ class Position(Primitive):
     @classmethod
     def parse_stream(self, stream, ctx, path, index=None, **kwargs):
         return stream.tell()
+
+class RightSize(Primitive):
+    _final_type = int
+    
+    @classmethod
+    def parse_stream(self, stream, ctx, path, index=None, **kwargs):
+        for x in ctx:
+            if '_right_size' in x:
+                return x['_right_size']
 
 def eval_with_ctx(expr, ctx, extra_ctx=None):
     if len(ctx):
@@ -990,7 +1010,6 @@ class Computed(Primitive):
 class ExprType(Primitive):
     pass
 
-# XXX this doesn't work as a class type - OK?
 class Pointer(Primitive):
     #_type
     #_addr
@@ -1002,6 +1021,7 @@ class Pointer(Primitive):
         if not issubclass(self._addr.infer_type(), int):
             raise ResolveError(path, f"Address must resolve to int.\n{self._addr.__name__} resolves to {full_type_name(self._addr.infer_type())}.\nHINT: This could be a syntax ambiguity.  If you intend to index or attribute in your address expression, make sure to put it in parenthesis!")
         self._final_type = self._type.infer_type()
+        self._yields = self._type._yields or self._addr._yields # god forbid
         return self
     
     @classmethod
@@ -1070,12 +1090,26 @@ class MatchType(Primitive, metaclass=MatchTypeMetaclass):
         self._match_types = {v.__name__: v for k, v in self._match.items()
             if isinstance(v, type) and issubclass(v, Primitive)}
         self._type = self._type.resolve(ctx, path)
+        self._yields = self._type._yields
+        self._final_type = None
         for key, value in self._match.items():
             if isinstance(key, str):
                 ctx.append({key: self._type})
             self._match[key] = value.resolve(ctx, path + [key])
+            if value._yields:
+                self._yields = True
+            if not self._final_type:
+                self._final_type = value.infer_type()
+            
+            # XXX we resort to string comparisons because
+            # we lack a proper type system
+            if self._final_type.__name__ != value.infer_type().__name__:
+                self._final_type = self
             if isinstance(key, str):
                 ctx.pop()
+        
+        if self._final_type == None:
+            self._final_type = self
         
         # minor optimization
         self._ranges = {}
@@ -1089,24 +1123,18 @@ class MatchType(Primitive, metaclass=MatchTypeMetaclass):
         return self
     
     @classmethod
-    def infer_type(self):
-        final_type = None
-        for type_ in self._match.values():
-            if final_type == None:
-                final_type = type_
-            if type_ != final_type:
-                return self
-        return final_type
-    
-    @classmethod
     def parse_stream(self, stream, ctx, path, index=None, **kwargs):
         value = self._type.parse_stream(stream, ctx, path, index=index, **kwargs)
         
-        if value in self._match:
-            return self._match[value].parse_stream(stream, ctx, path + [f"[{value}]"], **kwargs)
+        key_value = value
+        if isinstance(value, Byte):
+            key_value = ord(value)
+        
+        if key_value in self._match:
+            return self._match[key_value].parse_stream(stream, ctx, path + [f"[{value}]"], **kwargs)
         else:
             for range, rangeval in self._ranges.items():
-                if range.from_ <= value < range.to:
+                if range.from_ <= key_value < range.to:
                     return rangeval.parse_stream(stream, ctx, path + [f"[{range}]"], **kwargs)
             
             if self._default_key != None:
@@ -1196,9 +1224,10 @@ class Pipe(Primitive):
                 _left=self._left_type, _right=self._right_type, _op=operator.or_)
             return expr.resolve(ctx, path)
         
-        self._final_type = self._right_type
+        self._yields = self._left_type._yields or self._right_type._yields
+        self._final_type = self._right_type.infer_type()
         
-        self.__name__ = f"{self._left_type.__name__}|{self._right_type.__name__}"
+        self.__name__ = f"({self._left_type.__name__})|({self._right_type.__name__})"
         
         return self
     
@@ -1210,7 +1239,12 @@ class Pipe(Primitive):
             result = self._right_type.parse_left(left, ctx, path)
             return result
         else:
-            ctx.append({'_right': self._right_type})
+            right_size = None
+            try:
+                right_size = self._right_type.size()
+            except Exception as ex:
+                pass
+            ctx.append({'_right_size': right_size})
             pipe_stream = PipeStream(stream, ctx, self._left_type, path=path)
             result = self._right_type.parse_stream(pipe_stream, ctx, path, **kwargs)
             #if not pipe_stream.empty:
@@ -1230,6 +1264,7 @@ class ForeignKey(Primitive):
         if isinstance(self._field_name, str):
             self._field_name = (self._field_name,)
         self._type = self._type.resolve(ctx, path)
+        self._yields = self._type._yields
         
         self.__name__ = f"{self._type.__name__}ForeignKey"
         return self
@@ -1316,6 +1351,7 @@ class If(Primitive):
 class Field(): pass
 
 class SaveField(Field):
+    _yields = False
     def __init__(self, field_name):
         self._field_name = field_name
     
@@ -1324,9 +1360,12 @@ class SaveField(Field):
     
     def parse_stream(self, stream, ctx, path, index=None, **kwargs):
         foreign = ctx[-1][self._field_name]
+        if not hasattr(foreign, "_save"):
+            raise ParseError(path, f"field {self._field_name} (type {full_type_name(type(foreign))}) has no attribute _save (INTERNAL)")
         foreign._save(ctx, path + [self._field_name])
 
 class DebugField(Field):
+    _yields = False
     def __init__(self, field_name):
         self._field_name = field_name
     
@@ -1335,7 +1374,7 @@ class DebugField(Field):
     
     def parse_stream(self, stream, ctx, path, index=None, **kwargs):
         foreign = ctx[-1][self._field_name]
-        print(f"{self._field_name} is <{type(foreign).__name__}>: {repr(foreign)}")
+        print(f"{self._field_name} is {full_type_name(type(foreign))}: {repr(foreign)}")
 
 class Color(PipedPrimitive):
     @property
@@ -1373,6 +1412,7 @@ primitive_types = {
     # TODO long
     "I": Index,
     "Pos": Position,
+    "RightSize": RightSize,
     "Tile1BPP": Tile1BPP,
     "NESTile": NESTile,
     "GBTile": GBTile,
@@ -1480,6 +1520,7 @@ class TreeToStruct(Transformer):
             "-": operator.sub,
             "*": operator.mul,
             "/": operator.floordiv,
+            "%": operator.mod,
         }
         left, sign, right = tree
         return Expr.new(f"({sign} {left.__name__} {right.__name__})",

@@ -555,6 +555,7 @@ def test_match_range():
 }
 
 stuff   [5]Thing
+!debug stuff
 """
     result = datamijn.parse(dm, b("00 07 08 05 ee"))
     
@@ -626,6 +627,20 @@ test {
 """
     result = datamijn.parse(dm, b("000102"))
     assert result.test == [0, 2]
+
+def test_nested_yield():
+    dm = """
+test {
+    _ Byte match {
+        0 => < Byte * 2
+        a => < a
+    }
+} | [6]U8
+"""
+    result = datamijn.parse(dm, b("0001060005ff"))
+    assert result.test == [1, 1, 6, 5, 5, 0xff]
+
+
 
 def test_short_pipe():
     dm = """

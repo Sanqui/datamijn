@@ -40,13 +40,14 @@ count: "[" expr2 "]"
      | "[" "]"
 
 SIGNSUM: "+" | "-"
-SIGNPRODUCT: "*" | "/"
+SIGNPRODUCT: "*" | "/" | "%"
 
 type:   expr1               -> type
 
 ?expr1: expr2               -> type
     | "@" expr7 expr1        -> expr_ptr
     | "|@" expr7 expr1       -> expr_pipeptr
+    | "<" expr2              -> type_yield
       
 
 ?expr2: expr3               -> type
@@ -65,7 +66,6 @@ type:   expr1               -> type
     | count expr5            -> type_count
     | expr5 match            -> type_match
     | expr5 "char" match     -> type_char_match
-    | "<" expr5              -> type_yield
     | expr5 "->" field_name  -> type_foreign_key
 
 expr6: expr7                 -> type
