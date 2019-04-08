@@ -48,24 +48,15 @@ class TreeToStruct(Transformer):
     def __init__(self, path):
         self.path = path
         self.match_last = -1
-        self.ifcounter = 0
     
     def string(self, token):
         return token[0][1:-1]
     
-    def eval(self, token):
-        return eval(token[0])
-    
     def stringtype(self, token):
         return StringType(token[0])
     
-    def ctx_expr_par(self, token):
-        expr = token[0][2:-1]
-        
-        return expr
-    
-    def ctx_name(self, token):
-        return token[0].value
+    def num(self, tree):
+        return eval(tree[0]) # this is safe, trust me
     
     def match_key_int(self, tree):
         return int(tree[0])
@@ -119,7 +110,14 @@ class TreeToStruct(Transformer):
         
         return Container.new("Container", _contents=struct, _types=types, _return=return_)
     
-    def type_pipe(self, tree):
+    #
+    # expr
+    #
+    
+    def expr(self, tree):
+        return tree[0]
+    
+    def expr_pipe(self, tree):
         left_type, right_type = tree
         return Pipe.new(f"{left_type.__name__}|{right_type.__name__}",
             _left_type=left_type, _right_type=right_type)
@@ -149,86 +147,24 @@ class TreeToStruct(Transformer):
     def expr_bracket(self, tree):
         return tree[0]
     
-    def type(self, tree):
-        return tree[0]
-    
-    def type_foreign_key(self, tree):
+    def expr_foreign_key(self, tree):
         type_, field_name = tree
         return ForeignKey.new(f"{type_.__name__}ForeignKey",
             _type=type_, _field_name=field_name)
     
-    def type_equ(self, tree):
-        value = tree[0]
-        return Computed.new("Computed", _expr=value)
-    
-    def type_yield(self, tree):
+    def expr_yield(self, tree):
         type = tree[0]
         return Yield.new("Yield", _type=type)
     
-    def type_expr(self, tree):
-        print(tree)
-        
-        return None
-    
-    def type_match(self, tree):
+    def expr_match(self, tree):
         type = tree[0]
         match = tree[1]
         return MatchType.new(f"{type.__name__}Match", _type=type, _match=match)
         
-    def type_char_match(self, tree):
+    def expr_char_match(self, tree):
         type = tree[0]
         match = tree[1]
         return CharMatchType.new(f"{type.__name__}Match", _type=type, _match=match)
-    
-    def field_name(self, f):
-        return str(f[0])
-    
-    def field_name_dot(self, f):
-        return (f[0], f[1])
-    
-    def field_name_array(self, f):
-        return (ForeignListAssignment(f[0]), f[1])
-    
-    def field_name_underscore(self, f):
-        return None
-    
-    def equ_field(self, f):
-        name = f[0]
-        value = f[1]
-        
-        return (name, Computed.new(name, _expr=value))
-    
-    def return_field(self, f):
-        expr = f[0]
-        
-        return Return.new("Return", _expr=expr)
-    
-    def if_field(self, f):
-        computed = Computed.new("IfCondition", _expr=f[0][4:])
-        true_container = f[1]
-        false_container = f[2] if len(f) == 3 else []
-        
-        return (None, If.new("If", _computed=computed, _true_container=true_container, _false_container=false_container))
-    
-    def assert_field(self, f):
-        cond = f[0][8:]
-        
-        raise NotImplementedError()
-    
-    def save_field(self, f):
-        field_name = f[0]
-        
-        return SaveField(field_name)
-    
-    def debug_field(self, f):
-        field_name = f[0]
-        
-        return DebugField(field_name)
-    
-    def yield_field(self, f):
-        type = f[0]
-        
-        return (None, Yield.new("Yield", _type=type))
     
     def expr_name(self, f):
         name = str(f[0])
@@ -241,13 +177,10 @@ class TreeToStruct(Transformer):
         num = eval(f[0])
         return ExprInt.new(f"{num}", _int=num)
     
-    def type_typedef(self, f):
+    def expr_container(self, f):
         return f[0]
     
-    def type_container(self, f):
-        return f[0]
-    
-    def type_count(self, f):
+    def expr_count(self, f):
         count_tree, type_ = f
         if count_tree.children:
             count = count_tree.children[0]
@@ -265,27 +198,75 @@ class TreeToStruct(Transformer):
         type_ = f[1]
         return PipePointer.new(f"|@({addr.__name__})({type_.__name__})", _addr=addr, _type=type_)
     
-    def instance_field(self, f):
-        name = f[0]
-        type_ = f[1]
-        
-        return (name, type_)
-    
-    def typedef_field(self, f):
-        return f[0]
-    
-    def typedef(self, f):
+    def expr_typedef(self, f):
         name = f[0].value
         type_ = f[1]
         
         return type(name, (type_,), {})
     
-    def typedefvoid(self, f):
+    def expr_typedefvoid(self, f):
         name = f[0].value
         
         return type(name, (VoidType,), {})
     
-    def import_(self, token):
+    #
+    # field
+    #
+    
+    def field_name(self, f):
+        return str(f[0])
+    
+    def field_name_dot(self, f):
+        return (f[0], f[1])
+    
+    def field_name_array(self, f):
+        return (ForeignListAssignment(f[0]), f[1])
+    
+    def field_name_underscore(self, f):
+        return None
+    
+    def field_return(self, f):
+        expr = f[0]
+        
+        return Return.new("Return", _expr=expr)
+    
+    def field_if(self, f):
+        computed = Computed.new("IfCondition", _expr=f[0][4:])
+        true_container = f[1]
+        false_container = f[2] if len(f) == 3 else []
+        
+        return (None, If.new("If", _computed=computed, _true_container=true_container, _false_container=false_container))
+    
+    def field_assert(self, f):
+        cond = f[0][8:]
+        
+        raise NotImplementedError()
+    
+    def field_save(self, f):
+        field_name = f[0]
+        
+        return SaveField(field_name)
+    
+    def field_debug(self, f):
+        field_name = f[0]
+        
+        return DebugField(field_name)
+    
+    def field_yield(self, f):
+        type = f[0]
+        
+        return (None, Yield.new("Yield", _type=type))
+    
+    def field_instance(self, f):
+        name = f[0]
+        type_ = f[1]
+        
+        return (name, type_)
+    
+    def field_typedef(self, f):
+        return f[0]
+    
+    def statement_import(self, token):
         path = token[0] + ".dm"
         if self.path:
             path = self.path + "/" + path

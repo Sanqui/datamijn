@@ -1,4 +1,3 @@
-import math
 import operator
 from io import BytesIO, BufferedIOBase
 from datamijn.utils import UPPERCASE, full_type_name, ResolveError, ParseError
