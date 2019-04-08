@@ -286,7 +286,7 @@ class TreeToStruct(Transformer):
         for symbol, addr in symbols.items():
             fields.append((symbol, ExprInt.new(symbol, _int=addr)))
         
-        return ("sym", LenientContainer.new(f"SymfileContainer({token})", _contents=fields, _types={}, _return=[]))
+        return ("sym", LenientContainer.new(f"SymfileContainer({token[0]})", _contents=fields, _types={}, _return=[]))
         
 grammar = open(os.path.dirname(__file__)+"/grammar.g").read()
 

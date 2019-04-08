@@ -59,7 +59,7 @@ expr:   expr1                   -> expr
 ?expr5: expr6                   -> expr
     | ":" NAME expr5            -> expr_typedef
     | ":" NAME                  -> expr_typedefvoid
-    | count expr5               -> expr_count
+    | count expr1               -> expr_count
     | expr5 match               -> expr_match
     | expr5 "char" match        -> expr_char_match
     | expr5 "->" field_name     -> expr_foreign_key
