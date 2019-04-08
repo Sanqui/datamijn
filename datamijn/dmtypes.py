@@ -248,65 +248,65 @@ class Array(Primitive):
             self._length = self._length.resolve(ctx, path)
             if self._length._final:
                 self._length = self._length.parse_stream(None, None, path)
-        self._type = self._type.resolve(ctx, path)
+        self._parsetype = self._parsetype.resolve(ctx, path)
         
         match = None
         for elem_types, new_class in self.ARRAY_CLASSES.items():
             match = None
             cur_type = self
             for elem_type in elem_types:
-                if hasattr(cur_type.infer_type(), "_type") \
-                  and issubclass(cur_type.infer_type()._type.infer_type(), elem_type):
-                    cur_type = cur_type._type
+                if hasattr(cur_type.infer_type(), "_parsetype") \
+                  and issubclass(cur_type.infer_type()._parsetype.infer_type(), elem_type):
+                    cur_type = cur_type._parsetype
                     match = new_class
                 else:
                     match = None
             if match:
                 break
         
-        length_name = ""
+        self._length_name = ""
         if self._length and isinstance(self._length, int):
-            length_name = str(self._length)
+            self._length_name = str(self._length)
         elif self._length:
-            length_name = self._length.__name__
+            self._length_name = self._length.__name__
         
         if match:
-            name = f"[{length_name}]{self._type.__name__}{match.__name__}"
+            self._tail_name = match.__name__
         else:
-            match = ListArray
-            name = f"[{length_name}]{self._type.__name__}"
+            match = ListArray # !
+            self._tail_name = ""
         
-        new = match.new(name, _type=self._type, _length=self._length)
+        self._type = self._parsetype.infer_type()
+        
+        name = f"[{self._length_name}]{self._type.__name__}{self._tail_name}"
+        
+        new = match.new(name, _parsetype=self._parsetype, _type=self._type, _length=self._length)
         new._yields = self._type._yields
-        #final = self._type.infer_type()
-        #new._final_type = Array.new(f"[]{final.__name__}", _type=final)
-        #new._final_type.resolve(ctx, path + ["(final)"])
         return new
         
     
     @classmethod
     def size(self):
         if isinstance(self._length, int):
-            return self._length * self._type.infer_type().size()
+            return self._length * self._parsetype.infer_type().size()
         else:
             return None
     
     @classmethod
     def parse_stream(self, stream, ctx, path, index=None, **kwargs):
         contents = []
-        if isinstance(self._length, type) and issubclass(self._type, Primitive):
+        if isinstance(self._length, type) and issubclass(self._length, Primitive):
             length = self._length.parse_stream(stream, ctx, path, **kwargs)
         else:
             length = self._length
         
-        if self._length != None and self._type == Byte:
+        if self._length != None and self._parsetype == Byte:
             # Speed optimization for byte arrays!
             return stream.read(length)
         
         i = 0
         while True:
-            item = self._type.parse_stream(stream, ctx, path + [i], index=i, **kwargs)
-            
+            item = self._parsetype.parse_stream(stream, ctx, path + [i], index=i, **kwargs)
             if self._concat and len(contents) \
               and type(contents[-1]) == type(item) \
               and isinstance(item, str):
@@ -318,7 +318,7 @@ class Array(Primitive):
             if length:
                 if i >= length:
                     break
-            elif issubclass(self._type, int):
+            elif issubclass(self._parsetype, int):
                 if contents[-1] == 0:
                     break
             elif isinstance(contents[-1], Terminator):
@@ -332,7 +332,6 @@ class Array(Primitive):
         # Hopefully we can get rid of it one day
         #if issubclass(self._type, Container) and self._type._return != None and len(contents) > 0:
         #    self._type = type(contents[0])
-        #self._type = self._type.infer_type()
         
         if self._bytestring or len(contents) and isinstance(contents[0], bytes):
             return b"".join(contents)
@@ -342,7 +341,7 @@ class Array(Primitive):
     @classmethod
     def _or_type(self, other):
         if issubclass(other, Array):
-            return self._type._or_type(other._type)
+            return self._parsetype._or_type(other._parsetype)
         return None
     
     def __or__(self, other):
@@ -356,8 +355,8 @@ class Array(Primitive):
         newlist = type(self)(newlist)
         
         # XXX :(
-        if len(newlist) > 0:
-            newlist._type = type(newlist[0])
+        #if len(newlist) > 0:
+        #    newlist._type = type(newlist[0])
         
         return newlist
         

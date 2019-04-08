@@ -187,7 +187,7 @@ class TreeToStruct(Transformer):
             count = count_tree.children[0]
         else:
             count = None
-        return Array.new(f"[]{type_.__name__}", _type=type_, _length=count)
+        return Array.new(f"[]{type_.__name__}", _parsetype=type_, _length=count)
     
     def expr_ptr(self, f):
         addr = f[0]

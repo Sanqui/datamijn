@@ -457,12 +457,9 @@ numbers         [] U8
 
 def test_terminated_array():
     dm = """
-numbers         [] {
-    number      U8
-    = number match {
-        0xff    => Terminator
-        _       => number
-    }
+numbers [] U8 match {
+    0xff    => Terminator
+    number  => number
 }
 """
     result = datamijn.parse(dm, b("000102ff"))
