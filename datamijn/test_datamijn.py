@@ -1,7 +1,7 @@
 import pytest
 import os
 
-from datamijn import datamijn
+import datamijn
 
 from codecs import decode
 def b(string):
