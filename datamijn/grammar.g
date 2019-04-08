@@ -41,8 +41,8 @@ SIGNPRODUCT: "*" | "/" | "%"
 expr:   expr1                   -> expr
 
 ?expr1: expr2                   -> expr
-    | "@" expr7 expr1           -> expr_ptr
-    | "|@" expr7 expr1          -> expr_pipeptr
+    | "@" expr6 expr1           -> expr_ptr
+    | "|@" expr6 expr1          -> expr_pipeptr
     | "<" expr2                 -> expr_yield
       
 
@@ -65,10 +65,12 @@ expr:   expr1                   -> expr
     | expr5 "->" field_name     -> expr_foreign_key
 
 expr6: expr7                    -> expr
-    | expr6 "." NAME            -> expr_attr
     | expr6 "[" expr1 "]"       -> expr_index
 
-expr7: NAME                     -> expr_name
+expr7: expr8                    -> expr
+    | expr6 "." NAME            -> expr_attr
+
+expr8: NAME                     -> expr_name
     | container                 -> expr_container
     | NUM                       -> expr_int
     | "(" expr1 ")"             -> expr_bracket
@@ -94,6 +96,7 @@ COMMENT: /\/\/.*/
 _NL: COMMENT? /(\r?\n[\t ]*)+/
 
 ?topstatement: "!import" NAME _NL+  -> statement_import
+             | "!symfile" NAME _NL+ -> statement_symfile
              | field
 
 start: _NL* topstatement*           -> container

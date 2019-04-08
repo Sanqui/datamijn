@@ -1,5 +1,4 @@
 
-
 UPPERCASE = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
 def bits(byte):
@@ -22,6 +21,19 @@ def full_type_name(type):
         name += f" ({basenames})"
     
     return name
+
+def parse_symfile(f):
+    symbols = {}
+    for line in f.readlines():
+        line = line.split(";")[0]
+        if not line.strip(): continue
+        addr, label = line.strip().split(' ')
+        bank, offset = addr.split(':')
+        bank, offset = int(bank, 16), int(offset, 16)
+        if offset < 0x8000:
+            addr = bank*0x4000 + offset % 0x4000
+            symbols[label] = addr
+    return symbols
 
 class DatamijnPathError(Exception):
     def __init__(self, path, message):

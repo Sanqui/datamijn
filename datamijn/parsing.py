@@ -20,6 +20,7 @@ import png
 from datamijn.dmtypes import *
 from datamijn.gfx import Tile, Tile1BPP, NESTile, GBTile, Tileset, Image, \
     Palette, RGBColor
+from datamijn.utils import parse_symfile
 
 primitive_types = {
     "B1": B1,
@@ -272,6 +273,20 @@ class TreeToStruct(Transformer):
             path = self.path + "/" + path
         
         return parse_definition(open(path), name=f"!imported_{token[0]}", embed=True)
+    
+    def statement_symfile(self, token):
+        path = token[0] + ".sym"
+        if self.path:
+            path = self.path + "/" + path
+        
+        symbols = parse_symfile(open(path))
+        
+        fields = []
+        
+        for symbol, addr in symbols.items():
+            fields.append((symbol, ExprInt.new(symbol, _int=addr)))
+        
+        return ("sym", LenientContainer.new(f"SymfileContainer({token})", _contents=fields, _types={}, _return=[]))
         
 grammar = open(os.path.dirname(__file__)+"/grammar.g").read()
 

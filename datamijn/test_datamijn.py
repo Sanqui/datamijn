@@ -1099,6 +1099,26 @@ pics     _pics | _palettes
     assert open(tmpdir.join(f"/x/pics/bar.png"))
     assert open(tmpdir.join(f"/x/pics/nested/baz.png"))
 
+def test_symfile(tmpdir):
+    tmpdir.join("foobar.sym").write("""
+00:0008 Byte8
+00:0038 Rst38
+01:4000 Bank1
+02:4abc Bank2
+ff:ffff Nothing ; Comment
+""")
+    
+    tmpdir.join("test.dm").write("""
+!symfile foobar
+
+byte8    @sym.Byte8  U8
+bank2pos @sym.Bank2  Pos
+
+""")
+    
+    result = datamijn.parse(open(tmpdir.join("test.dm")), b("000102030405060708"))
+    assert result.byte8 == 8
+    assert result.bank2pos == 0x8abc
 
 def test_complex():
     result = datamijn.parse(open("datamijn/test/test2.dm"),

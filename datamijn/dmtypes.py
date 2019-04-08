@@ -390,6 +390,7 @@ class ByteString(bytes, Array):
     _bytestring = True
     
 class Container(dict, Primitive):
+    _lenient = True
     @classmethod
     def resolve(self, ctx=None, path=None, stdlib=None):
         if not ctx: ctx = []
@@ -416,7 +417,7 @@ class Container(dict, Primitive):
         contents_dict = {}
         
         for name, type_ in self._contents:
-            if name and isinstance(name, str) and name[0] in UPPERCASE:
+            if not self._lenient and name and isinstance(name, str) and name[0] in UPPERCASE:
                 raise ResolveError(path, f"{name}: Field names must start with a lowercase letter.")
             resolved = type_.resolve(ctx, path + [name])
             
@@ -571,6 +572,13 @@ class Container(dict, Primitive):
         if len(self._contents) == 0:
             out = out.replace("\n", "")
         return out.strip()
+
+class LenientContainer(Container):
+    """
+        Doesn't care about field names.  Typically they must start
+        with a lowercase letter.
+    """
+    _lenient = True
 
 class ExprName(Primitive):
     #_name
