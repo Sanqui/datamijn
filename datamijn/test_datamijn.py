@@ -469,8 +469,8 @@ numbers         [] {
     assert result.numbers[0] == 0
     assert result.numbers[1] == 1
     assert result.numbers[2] == 2
-    assert result.numbers[3] == datamijn.Terminator
-    assert len(result.numbers) == 4
+    #assert result.numbers[3] == datamijn.Terminator
+    assert len(result.numbers) == 3
 
 @pytest.mark.xfail # IDEA
 def test_fold_array():

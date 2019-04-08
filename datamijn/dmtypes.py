@@ -322,6 +322,8 @@ class Array(Primitive):
                 if contents[-1] == 0:
                     break
             elif isinstance(contents[-1], Terminator):
+                if type(contents[-1]) == Terminator:
+                    contents.pop()
                 break
             #else:
             #    raise ValueError("Improper terminating condition")
@@ -888,13 +890,16 @@ class MatchType(Primitive, metaclass=MatchTypeMetaclass):
             self._match[key] = value.resolve(ctx, path + [key])
             if value._yields:
                 self._yields = True
-            if not self._final_type:
-                self._final_type = value.infer_type()
             
-            # XXX we resort to string comparisons because
-            # we lack a proper type system
-            if self._final_type.__name__ != value.infer_type().__name__:
-                self._final_type = self
+            inferred_type = value.infer_type()
+            if inferred_type != Terminator:
+                if not self._final_type:
+                    self._final_type = inferred_type
+                
+                # XXX we resort to string comparisons because
+                # we lack a proper type system
+                if self._final_type.__name__ != inferred_type.__name__:
+                    self._final_type = self
             if isinstance(key, str):
                 ctx.pop()
         
