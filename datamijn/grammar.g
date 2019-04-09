@@ -23,10 +23,7 @@ match_key: num "=>"        -> match_key_int
     | NAME "=>"            -> match_key_default_name
     | "_" "=>"             -> match_key_default
 
-stringtype: string
-
-match_field: match_key? expr       _NL+
-    |        match_key? stringtype _NL+
+match_field: match_key? expr        _NL+
 
 match: "match" "{" _NL match_field+ "}"
 
@@ -37,6 +34,7 @@ count: "[" expr2 "]"
 
 SIGNSUM: "+" | "-"
 SIGNPRODUCT: "*" | "/" | "%"
+SIGNEQ: "!=" | "=="
 
 expr:   expr1                   -> expr
 
@@ -44,6 +42,7 @@ expr:   expr1                   -> expr
     | "@" expr6 expr1           -> expr_ptr
     | "|@" expr6 expr1          -> expr_pipeptr
     | "<" expr2                 -> expr_yield
+    | expr1 SIGNEQ expr2        -> expr_infix
       
 
 ?expr2: expr3                   -> expr
@@ -73,6 +72,7 @@ expr7: expr8                    -> expr
 expr8: NAME                     -> expr_name
     | container                 -> expr_container
     | NUM                       -> expr_int
+    | string                    -> expr_string
     | "(" expr1 ")"             -> expr_bracket
 
 typedef: ":" NAME expr              -> expr_typedef
@@ -86,7 +86,7 @@ field_name: NAME                    -> field_name
 field: "=" expr _NL+                      -> field_return
      | field_name expr _NL+               -> field_instance
      | typedef _NL+                       -> field_typedef
-     | /\!if ([^\{]+)/ container ("!else" container)? _NL+ -> field_if
+     | "!if" expr container ("!else" container)? _NL+ -> field_if
      | /\!assert(.*)/ _NL+                -> field_assert
      | "!save" field_name _NL+            -> field_save
      | "!debug" field_name _NL+           -> field_debug

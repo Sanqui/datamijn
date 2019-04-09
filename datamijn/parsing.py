@@ -53,9 +53,6 @@ class TreeToStruct(Transformer):
     def string(self, token):
         return token[0][1:-1]
     
-    def stringtype(self, token):
-        return StringType(token[0])
-    
     def num(self, tree):
         return eval(tree[0]) # this is safe, trust me
     
@@ -140,9 +137,11 @@ class TreeToStruct(Transformer):
             "*": operator.mul,
             "/": operator.floordiv,
             "%": operator.mod,
+            "==": operator.eq,
+            "!=": operator.ne,
         }
         left, sign, right = tree
-        return Expr.new(f"({sign} {left.__name__} {right.__name__})",
+        return ExprOp.new(f"({left.__name__}{sign}{right.__name__})",
             _left=left, _right=right, _op=OPERATIONS[sign])
     
     def expr_bracket(self, tree):
@@ -177,6 +176,10 @@ class TreeToStruct(Transformer):
     def expr_int(self, f):
         num = eval(f[0])
         return ExprInt.new(f"{num}", _int=num)
+    
+    def expr_string(self, token):
+        string = str(token[0])
+        return ExprString.new(string, _string=string)
     
     def expr_container(self, f):
         return f[0]
@@ -232,11 +235,11 @@ class TreeToStruct(Transformer):
         return Return.new("Return", _expr=expr)
     
     def field_if(self, f):
-        computed = Computed.new("IfCondition", _expr=f[0][4:])
+        expr = f[0]
         true_container = f[1]
         false_container = f[2] if len(f) == 3 else []
         
-        return (None, If.new("If", _computed=computed, _true_container=true_container, _false_container=false_container))
+        return (None, If.new("If", _expr=expr, _true_container=true_container, _false_container=false_container))
     
     def field_assert(self, f):
         cond = f[0][8:]

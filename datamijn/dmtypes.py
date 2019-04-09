@@ -36,21 +36,10 @@ class IOWithBits(BufferedIOBase):
             raise RuntimeError("Attempting to read bytes while not byte-aligned")
         return super().read(amount)
 
-class Token(str):
-    def __repr__(self):
-        return f"Token({self})"
-
-class Data():
-    def __init__(self, data, address, length):
-        self.data = data
-        self.address = address
-        self.length = length
-
 class Primitive():
     _size = None
     _char = False
     _embed = False
-    _forms = None
     _final = False
     _yields = False
     _final_type = None
@@ -94,17 +83,11 @@ class Primitive():
     
     @classmethod
     def _or_type(self, other):
-        print("default _or_type")
         return None
     
     def _save(self, ctx, path):
         raise NotImplementedError()
-    
-    def __repr__(self):
-        if hasattr(self, '_value'):
-            return f"{self.__class__.__name__}({repr(self._value)})"
-        else:
-            return f"{self.__class__.__name__}"
+        return f"{self.__class__.__name__}"
     
 class PipedPrimitive(Primitive):
     @classmethod
@@ -124,12 +107,11 @@ class VoidType(Primitive):
     def parse_stream(self, stream, ctx, path, index=None, **kwargs):
         return self()
     
-    @property
-    def _typename(self):
-        return str(self.__class__.__name__)
-    
     def __str__(self):
         return f"<{type(self).__name__}>"
+    
+    def __repr__(self):
+        return f"{self.__class__.__name__}"
     
     def __eq__(self, other):
         if type(self) == type(other):
@@ -182,7 +164,11 @@ class Word(Primitive, bytes):
             raise ParseError(path, "Failed to read stream")
         return self(read)
 
-class B1(Primitive, int):
+class IntPrimitive(Primitive, int):
+    def __repr__(self):
+        return f"{self.__class__.__name__}({int(self)})"
+
+class B1(IntPrimitive, int):
     _size = 1/8
     _num_bits = 1
     @classmethod
@@ -197,41 +183,42 @@ class B1(Primitive, int):
 def make_bit_type(num_bits):
     return type(f"B{num_bits}", (B1,), {"_num_bits": num_bits})
 
-class U8(Primitive, int):
+class U8(IntPrimitive, int):
     _size = 1
     @classmethod
     def parse_stream(self, stream, ctx, path, index=None, **kwargs):
         address = stream.tell()
         length = 1
         data = stream.read(1)
-        data = Data(data=data, address=address, length=length)
+        #data = Data(data=data, address=address, length=length)
         
-        value = ord(data.data)
-        #return self(value=value, data=data)
+        value = ord(data)
         obj = int.__new__(self, value)
-        obj._value = value
-        obj._data = data
         return obj
 
-class U16(Primitive, int):
+class U16(IntPrimitive, int):
     _size = 2
     @classmethod
     def parse_stream(self, stream, ctx, path, index=None, **kwargs):
         address = stream.tell()
         length = 2
         data = stream.read(2)
-        data = Data(data=data, address=address, length=length)
         
-        value = data.data[0] | (data.data[1] << 8)
-        #return self(value=value, data=data)
+        value = data[0] | (data[1] << 8)
         obj = int.__new__(self, value)
-        obj._value = value
-        obj._data = data
         return obj
 
-class U32(Primitive):
+class U32(IntPrimitive):
     _size = 4
-    pass
+    @classmethod
+    def parse_stream(self, stream, ctx, path, index=None, **kwargs):
+        address = stream.tell()
+        length = 2
+        data = stream.read(4)
+        
+        value = data[0] | (data[1] << 8) | (data[2] << 16) | (data[3] << 24)
+        obj = int.__new__(self, value)
+        return obj
 
 class Array(Primitive):
     # _type
@@ -264,21 +251,21 @@ class Array(Primitive):
             if match:
                 break
         
-        self._length_name = ""
+        length_name = ""
         if self._length and isinstance(self._length, int):
-            self._length_name = str(self._length)
+            length_name = str(self._length)
         elif self._length:
-            self._length_name = self._length.__name__
+            length_name = self._length.__name__
         
         if match:
-            self._tail_name = match.__name__
+            tail_name = match.__name__
         else:
             match = ListArray # !
-            self._tail_name = ""
+            tail_name = ""
         
         self._type = self._parsetype.infer_type()
         
-        name = f"[{self._length_name}]{self._type.__name__}{self._tail_name}"
+        name = f"[{length_name}]{self._type.__name__}{tail_name}"
         
         new = match.new(name, _parsetype=self._parsetype, _type=self._type, _length=self._length)
         new._yields = self._parsetype._yields
@@ -328,10 +315,6 @@ class Array(Primitive):
             #else:
             #    raise ValueError("Improper terminating condition")
         
-        # XXX This sucks, but it's the price for computed values.
-        # Hopefully we can get rid of it one day
-        #if issubclass(self._type, Container) and self._type._return != None and len(contents) > 0:
-        #    self._type = type(contents[0])
         
         if self._bytestring or len(contents) and isinstance(contents[0], bytes):
             return b"".join(contents)
@@ -389,9 +372,10 @@ class String(ListArray):
 class ByteString(bytes, Array):
     _concat = True
     _bytestring = True
-    
+
+
 class Container(dict, Primitive):
-    _lenient = True
+    _lenient = False
     @classmethod
     def resolve(self, ctx=None, path=None, stdlib=None):
         if not ctx: ctx = []
@@ -581,6 +565,7 @@ class LenientContainer(Container):
     """
     _lenient = True
 
+
 class ExprName(Primitive):
     #_name
     
@@ -636,14 +621,19 @@ class ExprInt(Primitive):
     #_int
     
     @classmethod
-    def resolve(self, ctx, path):
-        return self
-    
-    @classmethod
     def parse_stream(self, stream, ctx, path, index=None, **kwargs):
         return self._int
 
-class Expr(Primitive):
+class ExprString(Primitive):
+    _final = True
+    _final_type = str
+    #_string
+
+    @classmethod
+    def parse_stream(self, stream, ctx, path, index=None, **kwargs):
+        return self._string
+
+class ExprOp(Primitive):
     #_left
     #_right
     #_op
@@ -764,43 +754,6 @@ class RightSize(Primitive):
             if '_right_size' in x:
                 return x['_right_size']
 
-def eval_with_ctx(expr, ctx, extra_ctx=None):
-    if len(ctx):
-        context = {'_root': ctx[0]}
-        for x in ctx:
-            context.update(x)
-    else:
-        context = {'_root': None}
-    context['_terminator'] = Terminator() # XXX ?!
-    if extra_ctx:
-        context.update(extra_ctx)
-    
-    return eval(expr, context)
-
-class Computed(Primitive):
-    # _expr
-    @classmethod
-    def resolve(self, ctx, path):
-        return self
-
-    @classmethod
-    def parse_stream(self, stream, ctx, path, index=None, **kwargs):
-        extra_ctx = {
-        #    '_pos': stream.tell(),
-        #    '_i': index
-        }
-        try:
-            result = eval_with_ctx(self._expr, ctx, extra_ctx)
-        except Exception as ex:
-            pathstr = ".".join(str(x) for x in path)
-            raise Exception(f"{type(ex).__name__}: {ex}\nWhile computing {pathstr}\nExpression: {self._expr}")
-        if not isinstance(result, VoidType) and result != None:
-            pass
-        return result
-
-class ExprType(Primitive):
-    pass
-
 class Pointer(Primitive):
     #_type
     #_addr
@@ -856,16 +809,6 @@ class Yield(Primitive):
             raise TypeError(f'Only bytes may be yielded through a pipe (not {type(data).__name__}).\nPath: {".".join(str(x) for x in path)}')
         pipestream.append(data)
         return None
-
-class StringType(Primitive):
-    def __init__(self, string):
-        self.string = string
-    
-    def resolve(self, ctx, path):
-        return self
-
-    def parse_stream(self, stream, ctx, path, index=None, **kwargs):
-        return self.string
 
 # TODO explain why this is a thing ('cause I forgot)
 class MatchTypeMetaclass(type):
@@ -1014,7 +957,7 @@ class Pipe(Primitive):
           and not issubclass(self._left_type.infer_type(), ByteString) \
           and hasattr(self._left_type.infer_type(), "__or__") \
           and not issubclass(self._right_type, PipedPrimitive):
-            expr = Expr.new(f"(| {self._left_type.__name__} {self._right_type.__name__})",
+            expr = ExprOp.new(f"({self._left_type.__name__}|{self._right_type.__name__})",
                 _left=self._left_type, _right=self._right_type, _op=operator.or_)
             return expr.resolve(ctx, path)
         
@@ -1055,8 +998,6 @@ class ForeignKey(Primitive):
     
     @classmethod
     def resolve(self, ctx, path):
-        if isinstance(self._field_name, str):
-            self._field_name = (self._field_name,)
         self._type = self._type.resolve(ctx, path)
         self._yields = self._type._yields
         
@@ -1116,12 +1057,12 @@ class KeyRange():
             return NotImplemented
 
 class If(Primitive):
-    # _computed
+    # _expr
     # _true_container
     # _false_container
     @classmethod
     def resolve(self, ctx, path):
-        self._computed = self._computed.resolve(ctx, path)
+        self._expr = self._expr.resolve(ctx, path)
         self._true_container = self._true_container.resolve(ctx, path)
         self._true_container._embed = True
         if self._false_container:
@@ -1132,7 +1073,7 @@ class If(Primitive):
     
     @classmethod
     def parse_stream(self, stream, ctx, path, index=None, **kwargs):
-        result = self._computed.parse_stream(stream, ctx, path, index=index, **kwargs)
+        result = self._expr.parse_stream(stream, ctx, path, index=index, **kwargs)
         
         if result:
             return self._true_container.parse_stream(stream, ctx, path, index=index, **kwargs)
@@ -1173,6 +1114,6 @@ class DebugField(Field):
 Array.ARRAY_CLASSES.update({
         (Byte,):            ByteString,
         (str,):             String,
-        (StringType,):      String,
+        (ExprString,):      String,
         (CharMatchType,):   String,
 })

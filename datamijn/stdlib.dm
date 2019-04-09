@@ -16,9 +16,7 @@
 } | RGBColor)
 
 :GBBankFit {
-    _pos Pos
-    _right_size RightSize
-    !if (_pos // 0x4000) != (_pos + _right_size - 1) // 0x4000 {
+    !if (Pos / 0x4000) != ((Pos + RightSize - 1) / 0x4000) {
         _pad    0x4000 - (Pos % 0x4000)
         _       [_pad]Byte
     }
