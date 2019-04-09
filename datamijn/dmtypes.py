@@ -281,7 +281,7 @@ class Array(Primitive):
         name = f"[{self._length_name}]{self._type.__name__}{self._tail_name}"
         
         new = match.new(name, _parsetype=self._parsetype, _type=self._type, _length=self._length)
-        new._yields = self._type._yields
+        new._yields = self._parsetype._yields
         return new
         
     
