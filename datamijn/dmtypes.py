@@ -168,20 +168,28 @@ class IntPrimitive(Primitive, int):
     def __repr__(self):
         return f"{self.__class__.__name__}({int(self)})"
 
-class B1(IntPrimitive, int):
-    _size = 1/8
-    _num_bits = 1
+class BitType(IntPrimitive, int):
+    _size = None
+    _num_bits = None
     @classmethod
     def parse_stream(self, stream, ctx, path, index=None, **kwargs):
         value = stream.read_bits(self._num_bits)
-        #return self(value=value, data=data)
         obj = int.__new__(self, value)
         obj._value = value
-        #obj._data = data
+        return obj
+
+class B1(IntPrimitive, int):
+    _size = None
+    _num_bits = 1
+    @classmethod
+    def parse_stream(self, stream, ctx, path, index=None, **kwargs):
+        value = stream.read_bit()
+        obj = int.__new__(self, value)
+        obj._value = value
         return obj
 
 def make_bit_type(num_bits):
-    return type(f"B{num_bits}", (B1,), {"_num_bits": num_bits})
+    return type(f"B{num_bits}", (BitType,), {"_num_bits": num_bits})
 
 class U8(IntPrimitive, int):
     _size = 1
@@ -225,16 +233,20 @@ class Array(Primitive):
     # _length
     _concat = False
     _bytestring = False
+    _final_length = False
     
     ARRAY_CLASSES = {
     }
     
     @classmethod
     def resolve(self, ctx, path):
-        if self._length != None and not isinstance(self._length, int):
+        if type(self._length) == int:
+            self._final_length = True
+        elif self._length != None:
             self._length = self._length.resolve(ctx, path)
             if self._length._final:
                 self._length = self._length.parse_stream(None, None, path)
+                self._final_length = True
         self._parsetype = self._parsetype.resolve(ctx, path)
         
         match = None
@@ -267,7 +279,7 @@ class Array(Primitive):
         
         name = f"[{length_name}]{self._type.__name__}{tail_name}"
         
-        new = match.new(name, _parsetype=self._parsetype, _type=self._type, _length=self._length)
+        new = match.new(name, _parsetype=self._parsetype, _type=self._type, _length=self._length, _final_length=self._final_length)
         new._yields = self._parsetype._yields
         return new
         
@@ -282,10 +294,12 @@ class Array(Primitive):
     @classmethod
     def parse_stream(self, stream, ctx, path, index=None, **kwargs):
         contents = []
-        if isinstance(self._length, type) and issubclass(self._length, Primitive):
+        if self._final_length:
+            length = self._length
+        elif self._length != None:
             length = self._length.parse_stream(stream, ctx, path, **kwargs)
         else:
-            length = self._length
+            length = None
         
         if self._length != None and self._parsetype == Byte:
             # Speed optimization for byte arrays!
@@ -302,7 +316,7 @@ class Array(Primitive):
                 contents.append(item)
             
             i += 1
-            if length:
+            if length != None:
                 if i >= length:
                     break
             elif issubclass(self._parsetype, int):

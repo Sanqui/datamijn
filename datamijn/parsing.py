@@ -318,7 +318,13 @@ def parse_definition(definition, name=None, embed=False, stdlib=None):
 def parse(definition, data, output_dir=None):
     stdlib = parse_definition(open(os.path.dirname(__file__)+"/stdlib.dm").read(), embed=True)
     struct = parse_definition(definition, stdlib=stdlib)
-    struct._output_dir = output_dir
+    if output_dir:
+        output_dir = str(output_dir)
+        if not output_dir.endswith("/"):
+            output_dir += "/"
+        struct._output_dir = output_dir
+    else:
+        struct._output_dir = struct._filepath + "/datamijn_out/"
     
     start = struct
     

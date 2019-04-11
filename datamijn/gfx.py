@@ -20,16 +20,13 @@ class Tile(Primitive):
         self.tile = tile
     
     def _open_with_path(self, ctx, path):
-        output_dir = getattr(ctx[0], "_output_dir", None)
-        if not output_dir:
-            output_dir = ctx[0]._filepath + "/datamijn_out/"
-        output_dir = Path(output_dir)
-        filepath = Path("/".join(str(x) for x in path[:-1]))
-        filename = filepath / f"{path[-1]}.png"
-        full_filepath = output_dir / filepath
-        full_filename = output_dir / filename
+        output_dir = ctx[0]._output_dir
+        filepath = "/".join(str(x) for x in path[:-1])
+        filename = filepath + f"/{path[-1]}.png"
+        full_filepath = output_dir + "/" + filepath
+        full_filename = output_dir + "/" + filename
         os.makedirs(full_filepath, exist_ok=True)
-        return filename, open(full_filename, 'wb')
+        return filename.lstrip("/"), open(full_filename, 'wb')
 
 class PlanarTile(Tile):
     width = 8
@@ -39,16 +36,32 @@ class PlanarTile(Tile):
     
     @classmethod
     def parse_stream(self, stream, ctx, path, index=None, **kwargs):
-        #assert self.width == 8
+        # assert self.width == 8
         tile_data = stream.read(self.depth*self.width*self.height//8)
         tile = pyarray.array("B", [0]*8*self.width)
+        
+        # 76543210
+        # fedcba98
+        # ->
+        # ______80
+        # ______91
+        # ______a2 etc.
+        
         i = 0
         for y in range(self.height):
             for d in range(self.depth):
-                layer = bits(tile_data[i])
+                layer = tile_data[i] # bits(tile_data[i])
                 i += 1
-                for x in range(8):
-                    tile[y*self.width + 7-x] |= layer[x] << d
+                #for x in range(8):
+                # I promise this is faster
+                tile[y*self.width + 7] |= (layer & 0b00000001)      << d
+                tile[y*self.width + 6] |= (layer & 0b00000010) >> 1 << d
+                tile[y*self.width + 5] |= (layer & 0b00000100) >> 2 << d
+                tile[y*self.width + 4] |= (layer & 0b00001000) >> 3 << d
+                tile[y*self.width + 3] |= (layer & 0b00010000) >> 4 << d
+                tile[y*self.width + 2] |= (layer & 0b00100000) >> 5 << d
+                tile[y*self.width + 1] |= (layer & 0b01000000) >> 6 << d
+                tile[y*self.width    ] |= (layer & 0b10000000) >> 7 << d
             #if self.invert:
             #    line = [x ^ ((1 << self.depth) - 1) for x in line]
         return self(tile)
@@ -122,13 +135,17 @@ class Tileset(ListArray):
                 w = png.Writer(width, height,
                     greyscale=True, bitdepth=self._type._type.depth)
             else:
+                #assert self._type._type.depth <= 8
+                # speed up rendering by using an 8-bit paletted png
+                p8bit = palette.eightbit()
+                palette = p8bit + [(0, 0, 0)] * (256-len(p8bit))
                 w = png.Writer(width, height,
-                    greyscale=False, palette=palette.eightbit(), bitdepth=self._type._type.depth)
+                    greyscale=False, palette=p8bit, bitdepth=8) # self._type._type.depth
             
             pic = pyarray.array("B", [])
             for y in range(height):
-                for x in range(width):
-                    pic.append(self[y//8][x//8].tile[(y%8) * 8 + x%8])
+                for tilex in range(width//8):
+                    pic.extend(self[y//8][tilex].tile[(y%8) * 8 :(y%8) * 8 + 8])
             w.write_array(f, pic)
             f.close()
         else:
@@ -158,10 +175,16 @@ class Image(Tileset):
 
 class Palette(ListArray, PipedPrimitive):
     def eightbit(self):
+        # primitive reify
+        if hasattr(self, "_eightbit"):
+            return self._eightbit
+        
         colors = []
         for color in self:
             mul = (255/color.max)
             colors.append((int(color.r * mul), int(color.g * mul), int(color.b * mul)))
+        
+        self._eightbit = colors
         
         return colors
     
