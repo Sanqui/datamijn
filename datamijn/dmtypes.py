@@ -1015,7 +1015,12 @@ class ForeignKey(Primitive):
         self._type = self._type.resolve(ctx, path)
         self._yields = self._type._yields
         
-        self.__name__ = f"{self._type.__name__}ForeignKey"
+        if not isinstance(self._field_name, tuple):
+            self._field_name = (self._field_name,)
+        
+        # TODO flattern field name
+        
+        self.__name__ = f"({self._type.__name__} -> {self._field_name[-1]})"
         return self
     
     @classmethod
