@@ -43,6 +43,8 @@ class Primitive():
     _final = False
     _yields = False
     _final_type = None
+    _terminated = True
+    _terminates = False
     
     def __init__(self, value=None, data=None):
         self._value = value
@@ -188,6 +190,8 @@ class B1(IntPrimitive, int):
         obj._value = value
         return obj
 
+# TODO bit types should just be in this namespace
+
 def make_bit_type(num_bits):
     return type(f"B{num_bits}", (BitType,), {"_num_bits": num_bits})
 
@@ -234,6 +238,7 @@ class Array(Primitive):
     _concat = False
     _bytestring = False
     _final_length = False
+    _terminated = True
     
     ARRAY_CLASSES = {
     }
@@ -276,6 +281,11 @@ class Array(Primitive):
             tail_name = ""
         
         self._type = self._parsetype.infer_type()
+        
+        if self._length != None:
+            self._terminated = True
+        elif self._type._terminates:
+            self.
         
         name = f"[{length_name}]{self._type.__name__}{tail_name}"
         

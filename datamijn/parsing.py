@@ -307,6 +307,7 @@ def parse_definition(definition, name=None, embed=False, stdlib=None):
     struct = transformer.transform(parser.parse(definition))
     struct._filepath = path
     
+    
     struct.resolve(stdlib=stdlib)
     if name:
         struct.__name__ = name
