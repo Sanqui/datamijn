@@ -165,8 +165,13 @@ class Word(Primitive, bytes):
         return self(read)
 
 class IntPrimitive(Primitive, int):
+    _root_name = None
     def __repr__(self):
-        return f"{self.__class__.__name__}({int(self)})"
+        #return f"{self.__class__.__name__}({int(self)})"
+        if self._root_name == self.__class__.__name__:
+            return str(int(self))
+        else:
+            return f"{self.__class__.__name__} {int(self)}"
 
 class BitType(IntPrimitive, int):
     _size = None
@@ -179,6 +184,7 @@ class BitType(IntPrimitive, int):
         return obj
 
 class B1(IntPrimitive, int):
+    _root_name = "B1"
     _size = None
     _num_bits = 1
     @classmethod
@@ -189,9 +195,10 @@ class B1(IntPrimitive, int):
         return obj
 
 def make_bit_type(num_bits):
-    return type(f"B{num_bits}", (BitType,), {"_num_bits": num_bits})
+    return type(f"B{num_bits}", (BitType,), {"_num_bits": num_bits, "_root_name": f"B{num_bits}"})
 
 class U8(IntPrimitive, int):
+    _root_name = "U8"
     _size = 1
     @classmethod
     def parse_stream(self, stream, ctx, path, index=None, **kwargs):
@@ -205,6 +212,7 @@ class U8(IntPrimitive, int):
         return obj
 
 class U16(IntPrimitive, int):
+    _root_name = "U16"
     _size = 2
     @classmethod
     def parse_stream(self, stream, ctx, path, index=None, **kwargs):
@@ -217,6 +225,7 @@ class U16(IntPrimitive, int):
         return obj
 
 class U32(IntPrimitive):
+    _root_name = "U32"
     _size = 4
     @classmethod
     def parse_stream(self, stream, ctx, path, index=None, **kwargs):
@@ -1044,7 +1053,7 @@ class ForeignKey(Primitive):
         
         # TODO flattern field name
         
-        self.__name__ = f"({self._type.__name__} -> {self._field_name[-1]})"
+        self.__name__ = f"→ {self._field_name[-1]}"
         return self
     
     @classmethod
@@ -1078,6 +1087,9 @@ class ForeignKey(Primitive):
         obj = self._object
         
         return getattr(obj, attr)
+    
+    def __getitem__(self, item):
+        return self._object[item]
         
     def __repr__(self):
         return f"{type(self).__name__}({repr(self._result)}, {repr(self._field_name)})"

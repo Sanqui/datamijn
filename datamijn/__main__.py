@@ -2,11 +2,23 @@ from datamijn.parsing import parse_definition, parse
 
 from sys import argv
 
-STRUCTF = argv[1]
-FILEF = argv[2]
+struct_filename = argv[1]
+binary_filename = argv[2]
+if len(argv) > 3:
+    output_mode = argv[3]
+else:
+    output_mode = "pretty_repr"
 
-result = parse(open(STRUCTF), open(FILEF, "rb"))
+result = parse(open(struct_filename), open(binary_filename, "rb"))
 
-print(result._pretty_repr())
+if output_mode == "pretty_repr":
+    print(result._pretty_repr())
+elif output_mode == "browser":
+    from datamijn.browser import DatamijnBrowser
+    DatamijnBrowser(result).main()
+else:
+    print(f"Unknown output mode {output_mode}")
+
 #print(yaml.dump(result._python_value()))
 #print(yaml.dump(result))
+

@@ -10,6 +10,7 @@ pytest = "*"
 pypng = "*"
 oyaml = "*"
 profiling = "*"
+urwid = "*"
 
 [dev-packages]
 
