@@ -360,6 +360,24 @@ class Array(Primitive):
     def _save(self, ctx, path):
         for i, elem in enumerate(self):
             elem._save(ctx, path + [i])
+    
+    def _pretty_repr(self):
+        #name = type(self).__name__
+        #if name == "Array":
+        #    name = ""
+        #out = f"{name} [\n"
+        out = f"[\n"
+        for val in self:
+            if isinstance(val, Container) or isinstance(val, Array):
+                valrepr = "\n  ".join(val._pretty_repr().split('\n'))
+            else:
+                valrepr = repr(val)
+            out += f"  {valrepr},\n"
+        out += "]"
+        
+        if len(self) == 0:
+            out = out.replace("\n", "")
+        return out.strip()
 
 class ListArray(list, Array):
     def __add__(self, other):
@@ -382,11 +400,17 @@ class String(ListArray):
                 string += f"<{repr(item)}>"
         
         return string
+    
+    def _pretty_repr(self):
+        string = str(self).replace('"', '\"')
+        return '"' + str(self) + '"'
 
 class ByteString(bytes, Array):
     _concat = True
     _bytestring = True
 
+    def _pretty_repr(self):
+        return repr(self)
 
 class Container(dict, Primitive):
     _lenient = False
@@ -561,7 +585,7 @@ class Container(dict, Primitive):
         for name, type_ in self._contents:
             if isinstance(name, tuple): continue
             if not name: continue
-            if isinstance(self[name], Container):
+            if isinstance(self[name], Container) or isinstance(self[name], Array):
                 valrepr = "\n  ".join(self[name]._pretty_repr().split('\n'))
             else:
                 valrepr = repr(self[name])

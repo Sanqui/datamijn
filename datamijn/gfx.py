@@ -27,6 +27,9 @@ class Tile(Primitive):
         full_filename = output_dir + "/" + filename
         os.makedirs(full_filepath, exist_ok=True)
         return filename.lstrip("/"), open(full_filename, 'wb')
+    
+    def __repr__(self):
+        return f"<{type(self).__name__}>"
 
 class PlanarTile(Tile):
     width = 8
@@ -169,6 +172,9 @@ class Tileset(ListArray):
     
     def __repr__(self):
         return f"<{type(self).__name__}>"
+    
+    def _pretty_repr(self):
+        return repr(self)
 
 class Image(Tileset):
     pass
