@@ -171,7 +171,7 @@ class IntPrimitive(Primitive, int):
         if self._root_name == self.__class__.__name__:
             return str(int(self))
         else:
-            return f"{self.__class__.__name__} {int(self)}"
+            return f"{self.__class__.__name__}({int(self)})"
 
 class BitType(IntPrimitive, int):
     _size = None
