@@ -161,7 +161,13 @@ class DatamijnBrowser():
         ('key', "Q"),
     ]
 
-    def __init__(self, data=None):
+    def __init__(self, data=None, file=None):
+        self.file = file
+        self.file.seek(0)
+        self.file.read()
+        self.filesize = self.file.tell()
+        print(self.filesize)
+        
         self.topnode = DatamijnBrowserParentNode(data)
         self.treewalker = urwid.TreeWalker(self.topnode)
         urwid.connect_signal(self.treewalker, 'modified', self.modified_signal)
@@ -193,13 +199,37 @@ class DatamijnBrowser():
         if obj_size_extra:
             obj_size = obj_size + " + " + obj_size_extra
         obj_repr = repr(obj)
-        self.info.set_text([
+        
+        text = [
             ('name', "Path:    "), ('body', obj_path + "\n"),
             ('name', "Type:    "), ('body', "<"+type(obj).__name__+">\n"),
             ('name', "Address: "), ('body', obj_address+"\n"),
             ('name', "Size:    "), ('body', obj_size+"\n"),
-            ('name', "Value:   "), ('body', (obj_repr[:61]+'...' if len(obj_repr)>64 else obj_repr) + "\n"),
-        ])
+            ('name', "Value:   "), ('body', (obj_repr[:61]+'...' if len(obj_repr)>64 else obj_repr) + "\n\n"),
+        ]
+        
+        if self.file and hasattr(obj, "_address") and obj._address != None:
+            address = obj._address - (obj._address % 0x10)
+            size = obj._size or 0
+            self.file.seek(address)
+            text.append(('name', f' '*9))
+            for i in range(16):
+                text.append(('name', f'{i: 2x} '))
+            for i in range(16):
+                text.append(('name', f'{address:08x} '))
+                for j in range(16):
+                    if address >= self.filesize:
+                        text.append(('body', f'.. '))
+                    else:
+                        byte = ord(self.file.read(1))
+                        if address < obj._address or address >= obj._address + size:
+                            text.append(('body', f'{byte:02x} '))
+                        else:
+                            text.append(('focus', f'{byte:02x} '))
+                    address += 1
+                text.append(('name', '\n'))
+        
+        self.info.set_text(text)
 
     def main(self):
         self.screen = urwid.raw_display.Screen()
