@@ -44,24 +44,46 @@ class Primitive():
     _yields = False
     _final_type = None
     
-    def __init__(self, value=None, data=None):
-        self._value = value
-        self._data = data
+    #def __init__(self, value=None, data=None):
+    #    self._value = value
+    #    self._data = data
     
     @classmethod
     def size(self):
         if self._size != None:
             return int(self._size)
+        elif self._final:
+            return None
         else:
             raise NotImplementedError()
     
     @classmethod
     def new(self, name, bases=[], **kwargs):
         return type(name, (self, *bases), kwargs)
+        
+    @classmethod
+    def _parse_stream(self, stream, ctx, path, index=None, **kwargs):
+        raise NotImplementedError()
     
     @classmethod
     def parse_stream(self, stream, ctx, path, index=None, **kwargs):
-        raise NotImplementedError()
+        rich = ctx[0]._rich
+        if rich:
+            address = stream.tell()
+            try:
+                length = self.size()
+            except NotImplementedError:
+                length = None
+            #data = stream.read(1)
+            #data = Data(data=data, address=address, length=length)
+        
+        value = self._parse_stream(stream, ctx, path, index=index, **kwargs)
+        obj = self.__new__(self, value)
+        obj.__init__(value)
+        if rich:
+            obj._address = address
+            obj._size = length
+        return obj
     
     @classmethod
     def write(self, stream):
@@ -135,11 +157,11 @@ class Null(Primitive):
 class Byte(Primitive, bytes):
     _size = 1
     @classmethod
-    def parse_stream(self, stream, ctx, path, index=None, **kwargs):
+    def _parse_stream(self, stream, ctx, path, index=None, **kwargs):
         read = stream.read(1)
         if len(read) != self._size:
             raise ParseError(path, "Failed to read stream")
-        return self(read)
+        return read
     
     @classmethod
     def _mul_type(self, other):
@@ -149,20 +171,20 @@ class Byte(Primitive, bytes):
 class Short(Primitive, bytes):
     _size = 2
     @classmethod
-    def parse_stream(self, stream, ctx, path, index=None, **kwargs):
+    def _parse_stream(self, stream, ctx, path, index=None, **kwargs):
         read = stream.read(2)[::-1]
         if len(read) != self._size:
             raise ParseError(path, "Failed to read stream")
-        return self(read)
+        return read
 
 class Word(Primitive, bytes):
     _size = 4
     @classmethod
-    def parse_stream(self, stream, ctx, path, index=None, **kwargs):
+    def _parse_stream(self, stream, ctx, path, index=None, **kwargs):
         read = stream.read(4)[::-1]
         if len(read) != self._size:
             raise ParseError(path, "Failed to read stream")
-        return self(read)
+        return read
 
 class IntPrimitive(Primitive, int):
     _root_name = None
@@ -177,22 +199,18 @@ class BitType(IntPrimitive, int):
     _size = None
     _num_bits = None
     @classmethod
-    def parse_stream(self, stream, ctx, path, index=None, **kwargs):
+    def _parse_stream(self, stream, ctx, path, index=None, **kwargs):
         value = stream.read_bits(self._num_bits)
-        obj = int.__new__(self, value)
-        obj._value = value
-        return obj
+        return value
 
 class B1(IntPrimitive, int):
     _root_name = "B1"
     _size = None
     _num_bits = 1
     @classmethod
-    def parse_stream(self, stream, ctx, path, index=None, **kwargs):
+    def _parse_stream(self, stream, ctx, path, index=None, **kwargs):
         value = stream.read_bit()
-        obj = int.__new__(self, value)
-        obj._value = value
-        return obj
+        return value
 
 def make_bit_type(num_bits):
     return type(f"B{num_bits}", (BitType,), {"_num_bits": num_bits, "_root_name": f"B{num_bits}"})
@@ -201,41 +219,28 @@ class U8(IntPrimitive, int):
     _root_name = "U8"
     _size = 1
     @classmethod
-    def parse_stream(self, stream, ctx, path, index=None, **kwargs):
-        address = stream.tell()
-        length = 1
+    def _parse_stream(self, stream, ctx, path, index=None, **kwargs):
         data = stream.read(1)
-        #data = Data(data=data, address=address, length=length)
-        
         value = ord(data)
-        obj = int.__new__(self, value)
-        return obj
+        return value
 
 class U16(IntPrimitive, int):
     _root_name = "U16"
     _size = 2
     @classmethod
-    def parse_stream(self, stream, ctx, path, index=None, **kwargs):
-        address = stream.tell()
-        length = 2
+    def _parse_stream(self, stream, ctx, path, index=None, **kwargs):
         data = stream.read(2)
-        
         value = data[0] | (data[1] << 8)
-        obj = int.__new__(self, value)
-        return obj
+        return value
 
 class U32(IntPrimitive):
     _root_name = "U32"
     _size = 4
     @classmethod
-    def parse_stream(self, stream, ctx, path, index=None, **kwargs):
-        address = stream.tell()
-        length = 2
+    def _parse_stream(self, stream, ctx, path, index=None, **kwargs):
         data = stream.read(4)
-        
         value = data[0] | (data[1] << 8) | (data[2] << 16) | (data[3] << 24)
-        obj = int.__new__(self, value)
-        return obj
+        return value
 
 class Array(Primitive):
     # _type
@@ -310,6 +315,8 @@ class Array(Primitive):
         else:
             length = None
         
+        start_address = stream.tell()
+        
         if self._length != None and self._parsetype == Byte:
             # Speed optimization for byte arrays!
             return stream.read(length)
@@ -338,11 +345,15 @@ class Array(Primitive):
             #else:
             #    raise ValueError("Improper terminating condition")
         
+        size = stream.tell() - start_address
         
         if self._bytestring or len(contents) and isinstance(contents[0], bytes):
             return b"".join(contents)
         else:
-            return self(contents)
+            obj = self(contents)
+            obj._address = start_address
+            obj._size = size
+            return obj
     
     @classmethod
     def _or_type(self, other):
@@ -423,6 +434,8 @@ class ByteString(bytes, Array):
 
 class Container(dict, Primitive):
     _lenient = False
+    _rich = True
+    
     @classmethod
     def resolve(self, ctx=None, path=None, stdlib=None):
         if not ctx: ctx = []
@@ -472,18 +485,25 @@ class Container(dict, Primitive):
         
         return self
     
-    @classmethod
-    def size(self):
-        size = 0
-        for name, type_ in self._contents:
-            size += type_.size()
-        
-        return size
+    #@classmethod
+    #def size(self):
+    #    size = 0
+    #    for name, type_ in self._contents:
+    #        size += type_.size() or None
+    #    
+    #    return size
     
     @classmethod
     def parse_stream(self, stream, ctx=None, path=None, index=None, **kwargs):
         if not ctx: ctx = []
         if not path: path = []
+        
+        rich = ctx[0]._rich if len(ctx) else self._rich
+        if rich:
+            start_address = stream.tell()
+        
+        size = 0
+        size_extra = 0
         obj = self()
         ctx.append(obj)
         obj._ctx = ctx
@@ -491,7 +511,13 @@ class Container(dict, Primitive):
             passed_path = path[:]
             if name:
                 passed_path += [name]
+            address = stream.tell()
             result = type_.parse_stream(stream, ctx, passed_path, index=index, **kwargs)
+            if rich:
+                result_size = stream.tell() - address
+                size += result_size
+                if hasattr(result, '_size') and result._size:
+                    size_extra += result._size - size
             if name:
                 obj[name] = result
             elif isinstance(result, Container) and result._embed:
@@ -503,6 +529,10 @@ class Container(dict, Primitive):
             return value
         else:
             ctx.pop()
+            if rich:
+                obj._address = start_address
+                obj._size = size
+                obj._size_extra = size_extra
             return obj
     
     def __setitem__(self, key, value):
@@ -977,7 +1007,7 @@ class PipeStream(IOWithBits):
         return val
     
     def tell(self):
-        return None
+        return self._pos
     
     def append(self, data):
         pos = self._buffer.tell()
@@ -1028,7 +1058,8 @@ class Pipe(Primitive):
                 right_size = self._right_type.size()
             except Exception as ex:
                 pass
-            ctx.append({'_right_size': right_size})
+            #ctx.append({'_right_size': right_size})
+            ctx.append(Container({'_right_size': right_size}))
             pipe_stream = PipeStream(stream, ctx, self._left_type, path=path)
             result = self._right_type.parse_stream(pipe_stream, ctx, path, **kwargs)
             #if not pipe_stream.empty:

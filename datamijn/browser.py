@@ -159,6 +159,7 @@ class DatamijnBrowser():
         self.header = urwid.Text("")
         self.footer = urwid.AttrWrap(urwid.Text(self.footer_text),
             'foot')
+        self.info = urwid.Text("right")
         self.view = urwid.Frame(
             urwid.AttrWrap(self.listbox, 'body'),
             header=urwid.AttrWrap(self.header, 'head'),

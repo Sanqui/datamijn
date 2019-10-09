@@ -21,8 +21,8 @@ def test_basic_type(type, data, value):
     result = datamijn.parse(dm, data)
     assert result.value == value
     #assert result.value._data.data == data
-    #assert result.value._data.address == 0
-    #assert result.value._data.length == len(data)
+    assert result.value._address == 0
+    assert result.value._size == len(data)
 
 def test_typedef():
     dm = """
@@ -33,12 +33,12 @@ position  {
     result = datamijn.parse(dm, b('1020'))
     assert result.position.x == 0x10
     #assert result.position.x._data.data == b('10')
-    #assert result.position.x._data.address == 0x0
-    #assert result.position.x._data.length == 0x1
+    assert result.position.x._address == 0x0
+    assert result.position.x._size == 0x1
     assert result.position.y == 0x20
     #assert result.position.y._data.data == b('20')
-    #assert result.position.y._data.address == 0x1
-    #assert result.position.y._data.length == 0x1
+    assert result.position.y._address == 0x1
+    assert result.position.y._size == 0x1
     
     keys = ['x', 'y']
     for key, real_key in zip(result.position, ['x', 'y']):
