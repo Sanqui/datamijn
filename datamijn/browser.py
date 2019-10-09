@@ -80,10 +80,18 @@ class DatamijnBrowserTreeWidget(urwid.TreeWidget):
         return True
 
 class DatamijnBrowserNode(urwid.TreeNode):
+    #def __init__(self, data, browser, **kwargs):
+    #    super().__init__(self, data, **kwargs)
+    #    self._browser = browser
+    
     def load_widget(self):
         return DatamijnBrowserTreeWidget(self)
 
 class DatamijnBrowserParentNode(urwid.ParentNode):
+    #def __init__(self, data, browser, **kwargs):
+    #    super().__init__(self, data, **kwargs)
+    #    self._browser = browser
+        
     def load_widget(self):
         return DatamijnBrowserTreeWidget(self)
 
@@ -119,7 +127,8 @@ class DatamijnBrowserParentNode(urwid.ParentNode):
                 childclass = DatamijnBrowserParentNode
             else:
                 childclass = DatamijnBrowserNode
-        return childclass(childdata, parent=self, key=key, depth=childdepth)
+        obj = childclass(childdata, parent=self, key=key, depth=childdepth)
+        return obj
 
 
 class DatamijnBrowser():
@@ -154,16 +163,43 @@ class DatamijnBrowser():
 
     def __init__(self, data=None):
         self.topnode = DatamijnBrowserParentNode(data)
-        self.listbox = urwid.TreeListBox(urwid.TreeWalker(self.topnode))
+        self.treewalker = urwid.TreeWalker(self.topnode)
+        urwid.connect_signal(self.treewalker, 'modified', self.modified_signal)
+        self.listbox = urwid.TreeListBox(self.treewalker)
         self.listbox.offset_rows = 1
         self.header = urwid.Text("")
         self.footer = urwid.AttrWrap(urwid.Text(self.footer_text),
             'foot')
         self.info = urwid.Text("right")
-        self.view = urwid.Frame(
-            urwid.AttrWrap(self.listbox, 'body'),
-            header=urwid.AttrWrap(self.header, 'head'),
-            footer=self.footer)
+        self.view = urwid.Columns([
+            urwid.Frame(
+                urwid.AttrWrap(self.listbox, 'body'),
+                header=urwid.AttrWrap(self.header, 'head'),
+                footer=self.footer
+            ), 
+            urwid.Filler(
+                urwid.AttrWrap(self.info, 'body'),
+                valign='top',
+                top=1
+            )
+        ])
+    
+    def modified_signal(self):
+        obj = self.treewalker.get_focus()[1].get_value()
+        obj_path = ".".join(str(x) for x in obj._path) if hasattr(obj, "_path") else "?"
+        obj_address = hex(obj._address) if hasattr(obj, "_address") else "?"
+        obj_size = (hex(obj._size) if obj._size != None else "-") if hasattr(obj, "_size") else "?"
+        obj_size_extra = (hex(obj._size_extra) if obj._size_extra != None else "") if hasattr(obj, "_size_extra") else ""
+        if obj_size_extra:
+            obj_size = obj_size + " + " + obj_size_extra
+        obj_repr = repr(obj)
+        self.info.set_text([
+            ('name', "Path:    "), ('body', obj_path + "\n"),
+            ('name', "Type:    "), ('body', "<"+type(obj).__name__+">\n"),
+            ('name', "Address: "), ('body', obj_address+"\n"),
+            ('name', "Size:    "), ('body', obj_size+"\n"),
+            ('name', "Value:   "), ('body', (obj_repr[:61]+'...' if len(obj_repr)>64 else obj_repr) + "\n"),
+        ])
 
     def main(self):
         self.screen = urwid.raw_display.Screen()

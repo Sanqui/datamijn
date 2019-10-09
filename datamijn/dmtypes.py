@@ -83,6 +83,7 @@ class Primitive():
         if rich:
             obj._address = address
             obj._size = length
+            obj._path = path
         return obj
     
     @classmethod
@@ -353,6 +354,7 @@ class Array(Primitive):
             obj = self(contents)
             obj._address = start_address
             obj._size = size
+            obj._path = path
             return obj
     
     @classmethod
@@ -517,7 +519,7 @@ class Container(dict, Primitive):
                 result_size = stream.tell() - address
                 size += result_size
                 if hasattr(result, '_size') and result._size:
-                    size_extra += result._size - size
+                    size_extra += result._size - result_size
             if name:
                 obj[name] = result
             elif isinstance(result, Container) and result._embed:
@@ -533,6 +535,7 @@ class Container(dict, Primitive):
                 obj._address = start_address
                 obj._size = size
                 obj._size_extra = size_extra
+                obj._path = path
             return obj
     
     def __setitem__(self, key, value):
