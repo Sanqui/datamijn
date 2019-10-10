@@ -35,7 +35,11 @@ def parse_symfile(f):
             symbols[label] = addr
     return symbols
 
-class DatamijnPathError(Exception):
+class DatamijnError(Exception): pass
+
+class ForeignKeyError(DatamijnError): pass
+
+class DatamijnPathError(DatamijnError):
     def __init__(self, path, message):
         pathstr = '.'.join(str(x) for x in path)
         if not pathstr:

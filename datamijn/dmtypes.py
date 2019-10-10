@@ -1,6 +1,6 @@
 import operator
 from io import BytesIO, BufferedIOBase
-from datamijn.utils import UPPERCASE, full_type_name, ResolveError, ParseError
+from datamijn.utils import UPPERCASE, full_type_name, ResolveError, ParseError, ForeignKeyError
 
 class IOWithBits(BufferedIOBase):
     def __init__(self, *args, **kvargs):
@@ -1116,7 +1116,7 @@ class ForeignKey(Primitive):
         try:
             obj = foreign[self._result]
         except (IndexError, KeyError):
-            raise IndexError(f"Indexing foreign list `{self._field_name}[{self._result}]` failed")
+            raise ForeignKeyError(f"Indexing foreign list `{self._field_name}[{self._result}]` failed")
         
         return obj
     

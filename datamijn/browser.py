@@ -1,7 +1,7 @@
 # Derived from the Urwid example for lazy directory browser / tree view
 # See https://github.com/urwid/urwid/blob/master/examples/browse.py
 import urwid
-from datamijn.dmtypes import Container, Array, String, ForeignKey
+from datamijn.dmtypes import Container, Array, String, ForeignKey, ForeignKeyError
 from datamijn.gfx import RGBColor, Palette, Tile
 
 def text_from_color(value, space=True):
@@ -29,23 +29,32 @@ class DatamijnBrowserTreeWidget(urwid.TreeWidget):
         name_color = 'name'
         body_color = 'body'
         showtype = True
+        broken_value = False
         
         valuetext = []
         if isinstance(node, DatamijnBrowserParentNode):
             if isinstance(value, ForeignKey):
-                #name_color = 'name_foreign'
-                body_color = 'foreign'
+                try:
+                    value = value._object
+                except ForeignKeyError as ex:
+                    value = value
+                    body_color = 'error'
+                    broken_value = True
+                else:
+                    body_color = 'foreign'
                 valuetext += [(body_color, "→ ")]
-                value = value._object
-            if isinstance(value, String):
-                valuetext += [("string", "\""+str(value)+"\"")]
-            elif hasattr(value, 'name'):
-                valuetext += [(body_color, str(value.name))]
-            elif isinstance(value, Palette) and len(value) < 32:
-                for color in value:
-                    valuetext += text_from_color(color, space=False)
-            elif not isinstance(value, Container) and not isinstance(value, Array):
-                valuetext += [(body_color, repr(value))]
+            if broken_value:
+                valuetext += [(body_color, "(broken)")]
+            else:
+                if isinstance(value, String):
+                    valuetext += [("string", "\""+str(value)+"\"")]
+                elif hasattr(value, 'name'):
+                    valuetext += [(body_color, str(value.name))]
+                elif isinstance(value, Palette) and len(value) < 32:
+                    for color in value:
+                        valuetext += text_from_color(color, space=False)
+                elif not isinstance(value, Container) and not isinstance(value, Array):
+                    valuetext += [(body_color, repr(value))]
         else:
             if isinstance(value, Tile):
                 palette = []
@@ -60,6 +69,9 @@ class DatamijnBrowserTreeWidget(urwid.TreeWidget):
                     valuetext.append(('body', '\n'))
                 valuetext.pop(-1)
                 showtype = False
+            elif isinstance(value, Exception):
+                body_color = 'error'
+                valuetext += [(body_color, f"{type(value).__name__}: {value}")]
             else:
                 if isinstance(value, str):
                     body_color = 'string'
@@ -99,13 +111,19 @@ class DatamijnBrowserParentNode(urwid.ParentNode):
         def load_keys(data):
             if isinstance(data, Container):
                 #return list(data.keys())
-                return list(key for key in data.keys() if not key.startswith("_"))
+                if self.show_private:
+                    return list(data.keys())
+                else:
+                    return list(key for key in data.keys() if not key.startswith("_"))
             elif isinstance(data, Array):
                 return list(range(len(data)))
             elif isinstance(data, Tile):
                 return [None]
             elif isinstance(data, ForeignKey):
-                return load_keys(data._object)
+                try:
+                    return load_keys(data._object)
+                except ForeignKeyError:
+                    return [None]
             else:
                 return [None]
         data = self.get_value()
@@ -118,7 +136,10 @@ class DatamijnBrowserParentNode(urwid.ParentNode):
             childdata = value
             childclass = DatamijnBrowserNode
         elif key == None and isinstance(value, ForeignKey):
-            childdata = value._object
+            try:
+                childdata = value._object
+            except ForeignKeyError as ex:
+                childdata = ex
             childclass = DatamijnBrowserNode
         else:
             childdata = value[key]
@@ -128,6 +149,7 @@ class DatamijnBrowserParentNode(urwid.ParentNode):
             else:
                 childclass = DatamijnBrowserNode
         obj = childclass(childdata, parent=self, key=key, depth=childdepth)
+        obj.show_private = self.show_private
         return obj
 
 
@@ -145,7 +167,7 @@ class DatamijnBrowser():
         ('key', 'light cyan', 'black','underline'),
         ('title', 'white', 'black', 'bold'),
         ('flag', 'dark gray', 'light gray'),
-        ('error', 'dark red', 'light gray'),
+        ('error', 'white', 'dark red'),
     ]
 
     footer_text = [
@@ -162,7 +184,7 @@ class DatamijnBrowser():
         #('key', "Q"),
     ]
 
-    def __init__(self, data=None, file=None, binary_filename=""):
+    def __init__(self, data=None, file=None, binary_filename="", show_private=False):
         self.file = file
         self.file.seek(0)
         self.file.read()
@@ -170,6 +192,7 @@ class DatamijnBrowser():
         print(self.filesize)
         
         self.topnode = DatamijnBrowserParentNode(data)
+        self.topnode.show_private = True
         self.treewalker = urwid.TreeWalker(self.topnode)
         urwid.connect_signal(self.treewalker, 'modified', self.modified_signal)
         self.listbox = urwid.TreeListBox(self.treewalker)
@@ -189,7 +212,7 @@ class DatamijnBrowser():
             urwid.Filler(
                 urwid.AttrWrap(self.info, 'body'),
                 valign='top',
-                top=1
+                top=0
             )
         ])
         
@@ -197,23 +220,38 @@ class DatamijnBrowser():
     
     def modified_signal(self):
         obj = self.treewalker.get_focus()[1].get_value()
-        obj_path = ".".join(str(x) for x in obj._path) if hasattr(obj, "_path") else "?"
-        obj_address = hex(obj._address) if hasattr(obj, "_address") else "?"
-        obj_size = (hex(obj._size) if obj._size != None else "-") if hasattr(obj, "_size") else "?"
-        obj_size_extra = (hex(obj._size_extra) if obj._size_extra != None else "") if hasattr(obj, "_size_extra") else ""
-        if obj_size_extra:
-            obj_size = obj_size + " + " + obj_size_extra
+        broken_obj = False
+        obj_error = ""
+        try:
+            obj_path = ".".join(str(x) for x in obj._path) if hasattr(obj, "_path") else "?"
+        except ForeignKeyError as ex:
+            broken_obj = True
+            obj_error = f"{type(ex).__name__}: {ex}"
+        if not broken_obj:
+            obj_address = hex(obj._address) if hasattr(obj, "_address") else "?"
+            obj_size = (hex(obj._size) if obj._size != None else "-") if hasattr(obj, "_size") else "?"
+            obj_size_extra = (hex(obj._size_extra) if obj._size_extra != None else "") if hasattr(obj, "_size_extra") else ""
+            if obj_size_extra:
+                obj_size = obj_size + " + " + obj_size_extra
         obj_repr = repr(obj)
         
-        text = [
-            ('name', "Path:    "), ('body', obj_path + "\n"),
-            ('name', "Type:    "), ('body', "<"+type(obj).__name__+">\n"),
-            ('name', "Address: "), ('body', obj_address+"\n"),
-            ('name', "Size:    "), ('body', obj_size+"\n"),
+        if not broken_obj:
+            text = [
+                ('name', "Path:    "), ('body', obj_path + "\n"),
+                ('name', "Type:    "), ('body', "<"+type(obj).__name__+">\n"),
+                ('name', "Address: "), ('body', obj_address+"\n"),
+                ('name', "Size:    "), ('body', obj_size+"\n"),
+            ]
+        else:
+            text = [
+                ('error', "Broken object\n"),
+                ('body', obj_error+"\n\n\n")
+            ]
+        text += [
             ('name', "Value:   "), ('body', (obj_repr[:40]+'...' if len(obj_repr)>43 else obj_repr) + "\n\n"),
         ]
         
-        if self.file and hasattr(obj, "_address") and obj._address != None:
+        if not broken_obj and self.file and hasattr(obj, "_address") and obj._address != None:
             addresses = []
             sizes = []
             if isinstance(obj, Array) and not isinstance(obj, String):
@@ -229,12 +267,14 @@ class DatamijnBrowser():
             if self.align_width:
                 address = obj._address
             else:
-                address = obj._address - (obj._address % 0x10)
+                address = max(obj._address - (obj._address % 0x10) - 0x10, 0)
             self.file.seek(address)
-            text.append(('name', f' '*9))
+            text.append(('body', 'A' if self.align_width else ' '))
+            text.append(('name', f' '*8))
             child_i = 0
             for i in range(16):
                 text.append(('name', f'{i: 2x} '))
+            text.append(('name', f'\n'))
             for i in range(32):
                 text.append(('name', f'{address:08x} '))
                 for j in range(16):
