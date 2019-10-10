@@ -77,7 +77,10 @@ class Primitive():
             #data = stream.read(1)
             #data = Data(data=data, address=address, length=length)
         
-        value = self._parse_stream(stream, ctx, path, index=index, **kwargs)
+        try:
+            value = self._parse_stream(stream, ctx, path, index=index, **kwargs)
+        except Exception as ex:
+            raise Exception(f'{type(ex).__name__}: {ex}\nPath: {".".join(str(x) for x in path)}')
         obj = self.__new__(self, value)
         obj.__init__(value)
         if rich:

@@ -140,7 +140,7 @@ class DatamijnBrowser():
         ('foreign', 'light cyan', 'black'),
         ('type', 'dark gray', 'black'),
         ('focus', 'light gray', 'dark blue', 'standout'),
-        ('head', 'yellow', 'black', 'standout'),
+        ('head', 'white', 'dark green', 'standout'),
         ('foot', 'light gray', 'black'),
         ('key', 'light cyan', 'black','underline'),
         ('title', 'white', 'black', 'bold'),
@@ -149,19 +149,20 @@ class DatamijnBrowser():
     ]
 
     footer_text = [
-        ('title', "Datamijn Data Browser"), "    ",
-        ('key', "UP"), ",", ('key', "DOWN"), ",",
-        ('key', "PAGE UP"), ",", ('key', "PAGE DOWN"),
-        "  ",
-        ('key', "+"), ",",
-        ('key', "-"), "  ",
-        ('key', "LEFT"), "  ",
-        ('key', "HOME"), "  ",
-        ('key', "END"), "  ",
-        ('key', "Q"),
+        ('title', "Datamijn Data Browser (experimental)"), "    ",
+        ('key', "A (align)"),
+        #('key', "UP"), ",", ('key', "DOWN"), ",",
+        #('key', "PAGE UP"), ",", ('key', "PAGE DOWN"),
+        #"  ",
+        #('key', "+"), ",",
+        #('key', "-"), "  ",
+        #('key', "LEFT"), "  ",
+        #('key', "HOME"), "  ",
+        #('key', "END"), "  ",
+        #('key', "Q"),
     ]
 
-    def __init__(self, data=None, file=None):
+    def __init__(self, data=None, file=None, binary_filename=""):
         self.file = file
         self.file.seek(0)
         self.file.read()
@@ -173,7 +174,9 @@ class DatamijnBrowser():
         urwid.connect_signal(self.treewalker, 'modified', self.modified_signal)
         self.listbox = urwid.TreeListBox(self.treewalker)
         self.listbox.offset_rows = 1
-        self.header = urwid.Text("")
+        
+        header = binary_filename.split("/")[-1]
+        self.header = urwid.Text("File: "+header)
         self.footer = urwid.AttrWrap(urwid.Text(self.footer_text),
             'foot')
         self.info = urwid.Text("right")
@@ -189,6 +192,8 @@ class DatamijnBrowser():
                 top=1
             )
         ])
+        
+        self.align_width = False
     
     def modified_signal(self):
         obj = self.treewalker.get_focus()[1].get_value()
@@ -205,27 +210,50 @@ class DatamijnBrowser():
             ('name', "Type:    "), ('body', "<"+type(obj).__name__+">\n"),
             ('name', "Address: "), ('body', obj_address+"\n"),
             ('name', "Size:    "), ('body', obj_size+"\n"),
-            ('name', "Value:   "), ('body', (obj_repr[:61]+'...' if len(obj_repr)>64 else obj_repr) + "\n\n"),
+            ('name', "Value:   "), ('body', (obj_repr[:40]+'...' if len(obj_repr)>43 else obj_repr) + "\n\n"),
         ]
         
         if self.file and hasattr(obj, "_address") and obj._address != None:
-            address = obj._address - (obj._address % 0x10)
-            size = obj._size or 0
+            addresses = []
+            sizes = []
+            if isinstance(obj, Array) and not isinstance(obj, String):
+                # XXX this expects linear arrays.
+                for child in obj:
+                    if not hasattr(child, '_address'):
+                        continue
+                    addresses.append(child._address)
+                    sizes.append(child._size or 0)
+            else:
+                addresses.append(obj._address)
+                sizes.append(obj._size or 0)
+            if self.align_width:
+                address = obj._address
+            else:
+                address = obj._address - (obj._address % 0x10)
             self.file.seek(address)
             text.append(('name', f' '*9))
+            child_i = 0
             for i in range(16):
                 text.append(('name', f'{i: 2x} '))
-            for i in range(16):
+            for i in range(32):
                 text.append(('name', f'{address:08x} '))
                 for j in range(16):
                     if address >= self.filesize:
                         text.append(('body', f'.. '))
                     else:
+                        if child_i < len(addresses) and address >= addresses[child_i] + sizes[child_i]:
+                            child_i += 1
+                            if self.align_width and sizes[child_i-1] % 16 != 0:
+                                break
                         byte = ord(self.file.read(1))
-                        if address < obj._address or address >= obj._address + size:
+                        if child_i >= len(addresses) or address < addresses[child_i] or address >= addresses[child_i] + sizes[child_i]:
                             text.append(('body', f'{byte:02x} '))
                         else:
-                            text.append(('focus', f'{byte:02x} '))
+                            text.append(('focus', f'{byte:02x}'))
+                            if address == addresses[child_i] + sizes[child_i] - 1:
+                                text.append(('body', f' '))
+                            else:
+                                text.append(('focus', f' '))
                     address += 1
                 text.append(('name', '\n'))
         
@@ -239,6 +267,9 @@ class DatamijnBrowser():
         self.loop.run()
 
     def unhandled_input(self, k):
+        if k in ('a', 'A'):
+            self.align_width = not self.align_width
+            self.modified_signal()
         if k in ('q', 'Q'):
             raise urwid.ExitMainLoop()
 

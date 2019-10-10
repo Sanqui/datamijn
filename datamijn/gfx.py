@@ -38,7 +38,7 @@ class PlanarTile(Tile):
     invert = False
     
     @classmethod
-    def parse_stream(self, stream, ctx, path, index=None, **kwargs):
+    def _parse_stream(self, stream, ctx, path, index=None, **kwargs):
         # assert self.width == 8
         tile_data = stream.read(self.depth*self.width*self.height//8)
         tile = pyarray.array("B", [0]*8*self.width)
@@ -67,7 +67,7 @@ class PlanarTile(Tile):
                 tile[y*self.width    ] |= (layer & 0b10000000) >> 7 << d
             #if self.invert:
             #    line = [x ^ ((1 << self.depth) - 1) for x in line]
-        return self(tile)
+        return tile
     
     def _save(self, ctx, path):
         self._filename, f = self._open_with_path(ctx, path)
@@ -77,7 +77,7 @@ class PlanarTile(Tile):
 
 class PlanarCompositeTile(PlanarTile):
     @classmethod
-    def parse_stream(self, stream, ctx, path, index=None, **kwargs):
+    def _parse_stream(self, stream, ctx, path, index=None, **kwargs):
         #assert self.width == 8
         tile_data = stream.read(self.depth*self.width*self.height//8)
         tile = pyarray.array("B", [0]*8*self.width)
@@ -88,7 +88,7 @@ class PlanarCompositeTile(PlanarTile):
                 i += 1
                 for x in range(8):
                     tile[line*self.width + 7-x] |= layer[x] << d
-        return self(tile)
+        return tile
     
     def _save(self, ctx, path):
         self._filename, f = self._open_with_path(ctx, path)
