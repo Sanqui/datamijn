@@ -152,6 +152,12 @@ class DatamijnBrowserParentNode(urwid.ParentNode):
         obj.show_private = self.show_private
         return obj
 
+class HexViewerChild():
+    def __init__(self, address, size, name=None):
+        self.address = address
+        self.size = size or 0
+        self.end_address = self.address + self.size
+        self.name = str(name) if name != None else None
 
 class DatamijnBrowser():
     palette = [
@@ -165,14 +171,18 @@ class DatamijnBrowser():
         ('head', 'white', 'dark green', 'standout'),
         ('foot', 'light gray', 'black'),
         ('key', 'light cyan', 'black','underline'),
+        ('key_invert', 'black', 'light cyan','underline'),
         ('title', 'white', 'black', 'bold'),
         ('flag', 'dark gray', 'light gray'),
         ('error', 'white', 'dark red'),
     ]
 
     footer_text = [
-        ('title', "Datamijn Data Browser (experimental)"), "    ",
-        ('key', "A (align)"),
+        ('title', "Datamijn Data Browser (experimental)"), "   ",
+        ('key_invert', "A"),
+        ('key', " align "),
+        ('key_invert', "E"),
+        ('key', " explain "),
         #('key', "UP"), ",", ('key', "DOWN"), ",",
         #('key', "PAGE UP"), ",", ('key', "PAGE DOWN"),
         #"  ",
@@ -192,7 +202,7 @@ class DatamijnBrowser():
         print(self.filesize)
         
         self.topnode = DatamijnBrowserParentNode(data)
-        self.topnode.show_private = True
+        self.topnode.show_private = show_private
         self.treewalker = urwid.TreeWalker(self.topnode)
         urwid.connect_signal(self.treewalker, 'modified', self.modified_signal)
         self.listbox = urwid.TreeListBox(self.treewalker)
@@ -202,7 +212,7 @@ class DatamijnBrowser():
         self.header = urwid.Text("File: "+header)
         self.footer = urwid.AttrWrap(urwid.Text(self.footer_text),
             'foot')
-        self.info = urwid.Text("right")
+        self.info = urwid.Text("right", wrap='clip')
         self.view = urwid.Columns([
             urwid.Frame(
                 urwid.AttrWrap(self.listbox, 'body'),
@@ -217,6 +227,7 @@ class DatamijnBrowser():
         ])
         
         self.align_width = False
+        self.explain = False
     
     def modified_signal(self):
         obj = self.treewalker.get_focus()[1].get_value()
@@ -252,50 +263,87 @@ class DatamijnBrowser():
         ]
         
         if not broken_obj and self.file and hasattr(obj, "_address") and obj._address != None:
-            addresses = []
-            sizes = []
+            childs_at = {}
+            if isinstance(obj, ForeignKey):
+                obj = obj._object
             if isinstance(obj, Array) and not isinstance(obj, String):
                 # XXX this expects linear arrays.
-                for child in obj:
+                for i, child in enumerate(obj):
                     if not hasattr(child, '_address'):
                         continue
-                    addresses.append(child._address)
-                    sizes.append(child._size or 0)
+                    childs_at[child._address] = HexViewerChild(child._address, child._size, i)
+            elif isinstance(obj, Container):
+                for name, child in obj.items():
+                    if not hasattr(child, '_address'):
+                        continue
+                    childs_at[child._address] = HexViewerChild(child._address, child._size, name)
             else:
-                addresses.append(obj._address)
-                sizes.append(obj._size or 0)
+                childs_at[obj._address] = HexViewerChild(obj._address, obj._size, None)
             if self.align_width:
                 address = obj._address
             else:
                 address = max(obj._address - (obj._address % 0x10) - 0x10, 0)
+            last_child = None
+            cur_child = None
             self.file.seek(address)
-            text.append(('body', 'A' if self.align_width else ' '))
-            text.append(('name', f' '*8))
+            text.append(('key_invert', 'A') if self.align_width else ' ')
+            text.append(('key_invert', 'E') if self.explain else ' ')
+            text.append(('name', f' '*7))
             child_i = 0
             for i in range(16):
                 text.append(('name', f'{i: 2x} '))
             text.append(('name', f'\n'))
-            for i in range(32):
-                text.append(('name', f'{address:08x} '))
+            continue_focus = False
+            
+            for i in range(40):
+                text.append(('name', f'{address:08x}'))
+                text.append(('focus' if continue_focus else 'body', f' '))
+                line = []
+                explain_names = []
                 for j in range(16):
                     if address >= self.filesize:
-                        text.append(('body', f'.. '))
+                        line.append(('body', f'.. '))
                     else:
-                        if child_i < len(addresses) and address >= addresses[child_i] + sizes[child_i]:
-                            child_i += 1
-                            if self.align_width and sizes[child_i-1] % 16 != 0:
+                        if cur_child and address >= cur_child.end_address:
+                            last_child = cur_child
+                            cur_child = None
+                            if self.align_width and last_child.size % 16 != 0:
                                 break
+                        if address in childs_at:
+                            last_child = cur_child
+                            cur_child = childs_at[address]
+                            if self.explain and cur_child.name:
+                                explain_names.append((j, cur_child.name))
                         byte = ord(self.file.read(1))
-                        if child_i >= len(addresses) or address < addresses[child_i] or address >= addresses[child_i] + sizes[child_i]:
-                            text.append(('body', f'{byte:02x} '))
+                        if not cur_child:
+                            line.append(('body', f'{byte:02x} '))
+                            continue_focus = False
                         else:
-                            text.append(('focus', f'{byte:02x}'))
-                            if address == addresses[child_i] + sizes[child_i] - 1:
-                                text.append(('body', f' '))
+                            line.append(('focus', f'{byte:02x}'))
+                            if address == cur_child.end_address-1:
+                                line.append(('body', f' '))
+                                continue_focus = False
                             else:
-                                text.append(('focus', f' '))
+                                line.append(('focus', f' '))
+                                continue_focus = True
                     address += 1
-                text.append(('name', '\n'))
+                line.append(('body', '\n'))
+                if self.explain:
+                    explain_columns = [j for j, n in explain_names]
+                    for j, explain_name in reversed(explain_names):
+                        col_str = ""
+                        for j2 in range(j):
+                            if j2 in explain_columns:
+                                col_str += "|  "
+                            else:
+                                col_str += "   "
+                        line += [
+                            ('body', " "*9 + col_str + '`'),
+                            ('name', explain_name),
+                        #    ('body', explain_value)
+                        ]
+                        line.append(('body', '\n'))
+                text += line
         
         self.info.set_text(text)
 
@@ -309,6 +357,9 @@ class DatamijnBrowser():
     def unhandled_input(self, k):
         if k in ('a', 'A'):
             self.align_width = not self.align_width
+            self.modified_signal()
+        if k in ('e', 'E'):
+            self.explain = not self.explain
             self.modified_signal()
         if k in ('q', 'Q'):
             raise urwid.ExitMainLoop()

@@ -19,7 +19,7 @@ if output_mode == "pretty_repr":
 elif output_mode == "browser":
     binary_file = open(binary_filename, "rb")
     from datamijn.browser import DatamijnBrowser
-    DatamijnBrowser(result, file=binary_file, binary_filename=binary_filename, show_private=True).main()
+    DatamijnBrowser(result, file=binary_file, binary_filename=binary_filename, show_private=False).main()
 else:
     print(f"Unknown output mode {output_mode}")
 

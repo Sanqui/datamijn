@@ -1121,9 +1121,13 @@ class ForeignKey(Primitive):
         return obj
     
     def __getattr__(self, attr):
-        obj = self._object
+        if attr == "_address":
+            try:
+                return getattr(self._object, attr)
+            except ForeignKeyError:
+                raise AttributeError()
         
-        return getattr(obj, attr)
+        return getattr(self._object, attr)
     
     def __getitem__(self, item):
         return self._object[item]
