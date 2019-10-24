@@ -288,15 +288,17 @@ class DatamijnBrowser():
             self.file.seek(address)
             text.append(('key_invert', 'A') if self.align_width else ' ')
             text.append(('key_invert', 'E') if self.explain else ' ')
-            text.append(('name', f' '*7))
+            text.append(('name', f' '*8))
             child_i = 0
             for i in range(16):
                 text.append(('name', f'{i: 2x} '))
+                if i == 7:
+                    text.append(' ')
             text.append(('name', f'\n'))
             continue_focus = False
             
             for i in range(40):
-                text.append(('name', f'{address:08x}'))
+                text.append(('name', f'{address:08x} '))
                 text.append(('focus' if continue_focus else 'body', f' '))
                 line = []
                 explain_names = []
@@ -315,16 +317,17 @@ class DatamijnBrowser():
                             if self.explain and cur_child.name:
                                 explain_names.append((j, cur_child.name))
                         byte = ord(self.file.read(1))
+                        space = '  ' if j == 7 else ' '
                         if not cur_child:
-                            line.append(('body', f'{byte:02x} '))
+                            line.append(('body', f'{byte:02x}{space}'))
                             continue_focus = False
                         else:
                             line.append(('focus', f'{byte:02x}'))
                             if address == cur_child.end_address-1:
-                                line.append(('body', f' '))
+                                line.append(('body', space))
                                 continue_focus = False
                             else:
-                                line.append(('focus', f' '))
+                                line.append(('focus', space))
                                 continue_focus = True
                     address += 1
                 line.append(('body', '\n'))
@@ -333,12 +336,13 @@ class DatamijnBrowser():
                     for j, explain_name in reversed(explain_names):
                         col_str = ""
                         for j2 in range(j):
+                            space = " " if j2==7 else ""
                             if j2 in explain_columns:
-                                col_str += "|  "
+                                col_str += "|  " + space
                             else:
-                                col_str += "   "
+                                col_str += "   " + space
                         line += [
-                            ('body', " "*9 + col_str + '`'),
+                            ('body', " "*10 + col_str + '`'),
                             ('name', explain_name),
                         #    ('body', explain_value)
                         ]
