@@ -86,8 +86,7 @@ class TreeToStruct(Transformer):
         return dict(tree)
     
     def container(self, tree):
-        struct = []
-        types = {}
+        fields = []
         return_ = None
         
         if len(tree) and isinstance(tree[-1], type) and issubclass(tree[-1], Return):
@@ -97,16 +96,16 @@ class TreeToStruct(Transformer):
             if isinstance(field, type) and issubclass(field, Return):
                 raise SyntaxError("Return must be last in container") # TODO nicer error
             if isinstance(field, type) and issubclass(field, Primitive):
-                types[field.__name__] = field
+                fields.append((None, field))
             elif isinstance(field, Field):
-                struct.append((None, field))
+                fields.append((None, field))
             elif type(field) == tuple and len(field) == 2:
-                struct.append(field)
+                fields.append(field)
             else:
                 print(tree)
                 raise RuntimeError(f"Internal error: unknown container field {field}")
         
-        return Container.new("Container", _contents=struct, _types=types, _return=return_)
+        return Container.new("Container", _fields=fields, _return=return_)
     
     #
     # expr
@@ -118,6 +117,21 @@ class TreeToStruct(Transformer):
     def expr_pipe(self, tree):
         left_type, right_type = tree
         return Pipe.new(f"{left_type.__name__}|{right_type.__name__}",
+            _left_type=left_type, _right_type=right_type)
+    
+    def expr_inherit(self, tree):
+        left_type, name = tree
+        
+        # TODO this should be handled in the resolve pass so we can have
+        # nicer error messages?
+        
+        if name in primitive_types:
+            right_type = primitive_types[name]
+        else:
+            raise SyntaxError(f"""Can only inherit from primitive types
+Attempted to inherit {left_type.__name__} from {name}""")
+        
+        return Inheritance.new(f"{left_type.__name__} {right_type.__name__}",
             _left_type=left_type, _right_type=right_type)
     
     def expr_attr(self, tree):
@@ -208,10 +222,10 @@ class TreeToStruct(Transformer):
         
         return type(name, (type_,), {})
     
-    def expr_typedefvoid(self, f):
+    def expr_typedeftoken(self, f):
         name = f[0].value
         
-        return type(name, (VoidType,), {})
+        return type(name, (Token,), {})
     
     #
     # field
@@ -227,7 +241,7 @@ class TreeToStruct(Transformer):
         return (ForeignListAssignment(f[0]), f[1])
     
     def field_name_underscore(self, f):
-        return None
+        return "_"
     
     def field_return(self, f):
         expr = f[0]
@@ -289,7 +303,7 @@ class TreeToStruct(Transformer):
         for symbol, addr in symbols.items():
             fields.append((symbol, ExprInt.new(symbol, _int=addr)))
         
-        return ("sym", LenientContainer.new(f"SymfileContainer({token[0]})", _contents=fields, _types={}, _return=[]))
+        return ("sym", LenientContainer.new(f"SymfileContainer({token[0]})", _fields=fields, _return=[]))
         
 grammar = open(os.path.dirname(__file__)+"/grammar.g").read()
 

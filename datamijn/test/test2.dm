@@ -57,12 +57,12 @@ gfx {
 
 
     :GBColor Short | {
-        _max  31
+        max  31
         r     B5
         g     B5
         b     B5
         _     B1
-    } | RGBColor
+    } RGBColor
     :GBPalette [4]GBColor
     
     pal @0 GBPalette

@@ -2,6 +2,8 @@ import pytest
 import os
 
 import datamijn
+import datamijn.utils
+import datamijn.gfx
 
 from codecs import decode
 def b(string):
@@ -77,7 +79,7 @@ value   [4] :Coord {
     assert value[0].x == 0x00
     assert value[3].y == 0x31
     assert type(value[0]).__name__ == "Coord"
-    assert value._type.__name__ == "Coord"
+    assert value._child_type.__name__ == "Coord"
     assert type(value).__name__ == "[4]Coord"
 
 def test_array():
@@ -146,8 +148,10 @@ five        5
 x           five + 1
 x           x + 1
 """
-    result = datamijn.parse(dm, b('00'))
-    assert result.x == 7
+    with pytest.raises(datamijn.ResolveError):
+        result = datamijn.parse(dm, b('00'))
+        
+    #assert result.x == 7
 
 def test_expr_attr_access():
     dm = """
@@ -328,7 +332,7 @@ test       [2] U8 match {
     #assert result.test == ["one", 5]
 
 
-def test_match_string():
+def test_match_string1():
     db = """
 test        U8 match {
     0 => "a a"
@@ -623,6 +627,7 @@ test {
 } | [2]U8
 """
     result = datamijn.parse(dm, b("000102"))
+    #result = datamijn.parse(dm, b("000102 101112"))
     assert result.test == [0, 2]
 
 def test_nested_yield():
@@ -790,7 +795,7 @@ things      [4]{
 
 thing   U8 -> things
 """
-    with pytest.raises(IndexError):
+    with pytest.raises(datamijn.utils.ForeignKeyError):
         result = datamijn.parse(dm, b("00 11 21 31  05"))
         # a second resolve pass would catch this earlier
         result.thing.x
@@ -846,28 +851,33 @@ foo {
     assert result.foo.b == 0x02
     assert result.foo.c == 0x04
 
-def test_rgb_color():
-    dm = """
-:MyColor Short | {
-    _max  31
+@pytest.mark.parametrize("with_pipe", [False, True])
+def test_rgb_color(with_pipe):
+    if not with_pipe:
+        dm = ":MyColor {"
+    else:
+        dm = ":MyColor Short | {"
+    dm += """
+    max   31
     r     B5
     g     B5
     b     B5
     _     B1
-} | RGBColor
+} RGBColor
 :MyPalette [4]MyColor
 
 pal MyPalette
 """
     result = datamijn.parse(dm, b("abcdabcdabcdabcd"))
     assert len(result.pal) == 4
-    assert result.pal[0].r == 13
-    assert result.pal[0].g == 30
-    assert result.pal[0].b == 10
+    assert isinstance(result.pal[0], datamijn.gfx.Color)
+    assert result.pal[0].r == (11, 13)[with_pipe]
+    assert result.pal[0].g == (13, 30)[with_pipe]
+    assert result.pal[0].b == (19, 10)[with_pipe]
     assert result.pal[0].max == 31
-    assert result.pal[0].hex == "#6af652"
+    assert result.pal[0].hex == ("#5a6a9c", "#6af652")[with_pipe]
     
-
+'''
 def test_if():
     dm = """
 !if 1 {
@@ -933,6 +943,7 @@ def test_if_else_cross():
     assert result.x == 0
     assert result.y == 0
 
+'''
 '''
 
 def test_assert():

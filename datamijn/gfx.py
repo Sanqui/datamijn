@@ -4,7 +4,7 @@ import array as pyarray
 
 import png
 
-from datamijn.dmtypes import Primitive, Array, ListArray, PipedPrimitive
+from datamijn.dmtypes import Primitive, Array, ListArray
 from datamijn.utils import bits
 
 class Tile(Primitive):
@@ -110,7 +110,7 @@ class GBTile(PlanarTile):
 class Tileset(ListArray):
     def _save(self, ctx, path):
         palette = getattr(self, "_palette", None)
-        if issubclass(self._type, Tile):
+        if issubclass(self._child_type, Tile):
             # XXX maybe remove this
             for i, elem in enumerate(self):
                 elem._save(ctx, path + [i])
@@ -130,13 +130,13 @@ class Tileset(ListArray):
                         pic.append(0)
             w.write_array(f, pic)
             f.close()'''
-        elif issubclass(self._type, Tileset):
-            self._filename, f = self._type._type._open_with_path(self, ctx, path)
-            width = self._type._type.width*len(self[0])
-            height = self._type._type.height*len(self)
+        elif issubclass(self._child_type, Tileset):
+            self._filename, f = self._child_type._child_type._open_with_path(self, ctx, path)
+            width = self._child_type._child_type.width*len(self[0])
+            height = self._child_type._child_type.height*len(self)
             if not palette:
                 w = png.Writer(width, height,
-                    greyscale=True, bitdepth=self._type._type.depth)
+                    greyscale=True, bitdepth=self._child_type._child_type.depth)
             else:
                 #assert self._type._type.depth <= 8
                 # speed up rendering by using an 8-bit paletted png
@@ -164,7 +164,7 @@ class Tileset(ListArray):
     def __or__(self, other):
         if isinstance(other, Palette):
             image = Image(self)
-            image._type = self._type
+            image._child_type = self._child_type
             image._palette = other
             return image
         else:
@@ -179,7 +179,7 @@ class Tileset(ListArray):
 class Image(Tileset):
     pass
 
-class Palette(ListArray, PipedPrimitive):
+class Palette(ListArray):
     def eightbit(self):
         # primitive reify
         if hasattr(self, "_eightbit"):
@@ -197,22 +197,13 @@ class Palette(ListArray, PipedPrimitive):
     def __repr__(self):
         return f"<{type(self).__name__}>"
 
-class Color(PipedPrimitive):
+class Color(Primitive):
     @property
     def hex(self):
         raise NotImplementedError()
 
 class RGBColor(Color):
-    def __init__(self, r, g, b, max):
-        self.r = r
-        self.g = g
-        self.b = b
-        self.max = max
-    
-    @classmethod
-    def parse_left(self, container, ctx, path, index=None):
-        return self(container.r, container.g, container.b, container._max)
-    
+    _inherited_fields = "r g b max".split()
     @property
     def hex(self):
         mul = (255/self.max)

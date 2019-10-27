@@ -56,8 +56,9 @@ expr:   expr1                   -> expr
       | expr4 "|" expr5         -> expr_pipe
 
 ?expr5: expr6                   -> expr
+    | expr5 NAME                -> expr_inherit
     | ":" NAME expr5            -> expr_typedef
-    | ":" NAME                  -> expr_typedefvoid
+    | ":" NAME                  -> expr_typedeftoken
     | count expr1               -> expr_count
     | expr5 match               -> expr_match
     | expr5 "char" match        -> expr_char_match
@@ -76,7 +77,7 @@ expr8: NAME                     -> expr_name
     | "(" expr1 ")"             -> expr_bracket
 
 typedef: ":" NAME expr              -> expr_typedef
-    |    ":" NAME                   -> expr_typedefvoid
+    |    ":" NAME                   -> expr_typedeftoken
 
 field_name: NAME                    -> field_name
     | field_name "." field_name     -> field_name_dot
