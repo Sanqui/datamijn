@@ -1199,8 +1199,8 @@ Attempted to inherit {self._left_type.__name__} from {self._right_type.__name__}
 class ForeignKey(Primitive):
     # _type
     # field_name
-    def __init__(self, result, ctx):
-        self._result = result
+    def __init__(self, key, ctx):
+        self._key = key
         self._ctx = ctx
     
     @classmethod
@@ -1218,28 +1218,28 @@ class ForeignKey(Primitive):
     
     @classmethod
     def parse_stream(self, stream, ctx, path, index=None, **kwargs):
-        result = self._type.parse_stream(stream, ctx, path, **kwargs)
+        key = self._type.parse_stream(stream, ctx, path, **kwargs)
         
-        if result == None:
+        if key == None:
             return None
         
-        return self(result, ctx[0])
+        return self(key, ctx[0])
     
     @property
     def _object(self):
         foreign = self._ctx
         key = self._field_name
-        while isinstance(key, tuple) and len(key) == 2:
-            foreign = foreign[key[0]]
-            key = key[1]
-        while isinstance(key, tuple) and len(key) == 1:
-            key = key[0]
-        foreign = foreign[key]
-                
         try:
-            obj = foreign[self._result]
+            while isinstance(key, tuple) and len(key) == 2:
+                foreign = foreign[key[0]]
+                key = key[1]
+            while isinstance(key, tuple) and len(key) == 1:
+                key = key[0]
+            foreign = foreign[key]
+                
+            obj = foreign[self._key]
         except (IndexError, KeyError):
-            raise ForeignKeyError(f"Indexing foreign list `{self._field_name}[{self._result}]` failed")
+            raise ForeignKeyError(f"Indexing foreign list `{self._field_name}[{self._key}]` failed")
         
         return obj
     
@@ -1256,7 +1256,7 @@ class ForeignKey(Primitive):
         return self._object[item]
         
     def __repr__(self):
-        return f"{type(self).__name__}({repr(self._result)}, {repr(self._field_name)})"
+        return f"{type(self).__name__}({repr(self._key)}, {repr(self._field_name)})"
 
 class ForeignListAssignment():
     def __init__(self, name):

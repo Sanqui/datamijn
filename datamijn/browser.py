@@ -172,6 +172,7 @@ class DatamijnBrowser():
         ('type', 'dark gray', 'black'),
         ('focus', 'light gray', 'dark blue', 'standout'),
         ('focus_pointer', 'light gray', 'dark magenta', 'standout'),
+        ('focus_key', 'light gray', 'dark cyan', 'standout'),
         ('head', 'white', 'dark green', 'standout'),
         ('foot', 'light gray', 'black'),
         ('key', 'light cyan', 'black','underline'),
@@ -250,6 +251,7 @@ class DatamijnBrowser():
                 obj_size = obj_size + " + " + obj_size_extra
             
             obj_pointer = obj._pointer if hasattr(obj, "_pointer") else None
+            obj_key = obj._key if hasattr(obj, "_key") else None
         obj_repr = repr(obj)
         
         if not broken_obj:
@@ -261,6 +263,8 @@ class DatamijnBrowser():
             ]
             if obj_pointer:
                 text += [('name', "Pointer: "), ('body', repr(obj_pointer)+f" <{type(obj_pointer).__name__}>\n")]
+            elif obj_key:
+                text += [('name', "Key:     "), ('body', repr(obj_key)+f" <{type(obj_key).__name__}>\n")]
             else:
                 text.append('\n')
         else:
@@ -274,27 +278,27 @@ class DatamijnBrowser():
         
         if not broken_obj and self.file and hasattr(obj, "_address") and obj._address != None:
             childs_at = {}
+        
+            def get_childs_from(obj, name):
+                if not hasattr(obj, '_address'):
+                    return
+                childs_at[obj._address] = HexViewerChild(obj._address, obj._size, name)
+                if hasattr(obj, '_pointer') and hasattr(obj._pointer, '_address'):
+                    childs_at[obj._pointer._address] = HexViewerChild(obj._pointer._address, obj._pointer._size, f"{name} ptr", type="pointer")
+                if hasattr(obj, '_key') and hasattr(obj._key, '_address'):
+                    childs_at[obj._key._address] = HexViewerChild(obj._key._address, obj._key._size, f"{name} key", type="key")
+        
             if isinstance(obj, ForeignKey):
                 obj = obj._object
             if isinstance(obj, Array) and not isinstance(obj, String):
                 # XXX this expects linear arrays.
                 for i, child in enumerate(obj):
-                    if not hasattr(child, '_address'):
-                        continue
-                    childs_at[child._address] = HexViewerChild(child._address, child._size, i)
-                    if hasattr(child, '_pointer') and hasattr(child._pointer, '_address'):
-                        childs_at[child._pointer._address] = HexViewerChild(child._pointer._address, child._pointer._size, f"{i} ptr", type="pointer")
+                    get_childs_from(child, i)
             elif isinstance(obj, Container):
                 for name, child in obj.items():
-                    if not hasattr(child, '_address'):
-                        continue
-                    childs_at[child._address] = HexViewerChild(child._address, child._size, name)
-                    if hasattr(child, '_pointer') and hasattr(child._pointer, '_address'):
-                        childs_at[child._pointer._address] = HexViewerChild(child._pointer._address, child._pointer._size, f"{name} ptr", type="pointer")
+                    get_childs_from(child, name)
             else:
-                childs_at[obj._address] = HexViewerChild(obj._address, obj._size, None)
-                if hasattr(obj, '_pointer') and hasattr(obj._pointer, '_address'):
-                    childs_at[obj._pointer._address] = HexViewerChild(obj._pointer._address, obj._pointer._size, None, type="pointer")
+                get_childs_from(obj, None)
             if self.align_width:
                 address = obj._address
             else:
@@ -338,10 +342,7 @@ class DatamijnBrowser():
                             line.append(('body', f'{byte:02x}{space}'))
                             continue_focus = None
                         else:
-                            if cur_child.type == 'pointer':
-                                continue_focus = 'focus_pointer'
-                            else:
-                                continue_focus = 'focus'
+                            continue_focus = 'focus' + (f"_{cur_child.type}" if cur_child.type else "")
                             line.append((continue_focus, f'{byte:02x}'))
                             if address == cur_child.end_address-1:
                                 line.append(('body', space))
