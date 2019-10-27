@@ -1,8 +1,10 @@
 # Derived from the Urwid example for lazy directory browser / tree view
 # See https://github.com/urwid/urwid/blob/master/examples/browse.py
 import urwid
+import math
 from datamijn.dmtypes import Container, Array, String, ForeignKey, ForeignKeyError
 from datamijn.gfx import RGBColor, Palette, Tile
+from datamijn.utils import full_type_name
 
 def text_from_color(value, space=True):
     valuetext = []
@@ -153,11 +155,12 @@ class DatamijnBrowserParentNode(urwid.ParentNode):
         return obj
 
 class HexViewerChild():
-    def __init__(self, address, size, name=None):
+    def __init__(self, address, size, name=None, type=None):
         self.address = address
         self.size = size or 0
         self.end_address = self.address + self.size
         self.name = str(name) if name != None else None
+        self.type = type
 
 class DatamijnBrowser():
     palette = [
@@ -168,6 +171,7 @@ class DatamijnBrowser():
         ('foreign', 'light cyan', 'black'),
         ('type', 'dark gray', 'black'),
         ('focus', 'light gray', 'dark blue', 'standout'),
+        ('focus_pointer', 'light gray', 'dark magenta', 'standout'),
         ('head', 'white', 'dark green', 'standout'),
         ('foot', 'light gray', 'black'),
         ('key', 'light cyan', 'black','underline'),
@@ -244,19 +248,25 @@ class DatamijnBrowser():
             obj_size_extra = (hex(obj._size_extra) if obj._size_extra != None else "") if hasattr(obj, "_size_extra") else ""
             if obj_size_extra:
                 obj_size = obj_size + " + " + obj_size_extra
+            
+            obj_pointer = obj._pointer if hasattr(obj, "_pointer") else None
         obj_repr = repr(obj)
         
         if not broken_obj:
             text = [
                 ('name', "Path:    "), ('body', obj_path + "\n"),
-                ('name', "Type:    "), ('body', "<"+type(obj).__name__+">\n"),
+                ('name', "Type:    "), ('body', ""+full_type_name(type(obj))+"\n"),
                 ('name', "Address: "), ('body', obj_address+"\n"),
                 ('name', "Size:    "), ('body', obj_size+"\n"),
             ]
+            if obj_pointer:
+                text += [('name', "Pointer: "), ('body', repr(obj_pointer)+f" <{type(obj_pointer).__name__}>\n")]
+            else:
+                text.append('\n')
         else:
             text = [
                 ('error', "Broken object\n"),
-                ('body', obj_error+"\n\n\n")
+                ('body', obj_error+"\n\n\n\n")
             ]
         text += [
             ('name', "Value:   "), ('body', (obj_repr[:40]+'...' if len(obj_repr)>43 else obj_repr) + "\n\n"),
@@ -272,13 +282,19 @@ class DatamijnBrowser():
                     if not hasattr(child, '_address'):
                         continue
                     childs_at[child._address] = HexViewerChild(child._address, child._size, i)
+                    if hasattr(child, '_pointer') and hasattr(child._pointer, '_address'):
+                        childs_at[child._pointer._address] = HexViewerChild(child._pointer._address, child._pointer._size, f"{i} ptr", type="pointer")
             elif isinstance(obj, Container):
                 for name, child in obj.items():
                     if not hasattr(child, '_address'):
                         continue
                     childs_at[child._address] = HexViewerChild(child._address, child._size, name)
+                    if hasattr(child, '_pointer') and hasattr(child._pointer, '_address'):
+                        childs_at[child._pointer._address] = HexViewerChild(child._pointer._address, child._pointer._size, f"{name} ptr", type="pointer")
             else:
                 childs_at[obj._address] = HexViewerChild(obj._address, obj._size, None)
+                if hasattr(obj, '_pointer') and hasattr(obj._pointer, '_address'):
+                    childs_at[obj._pointer._address] = HexViewerChild(obj._pointer._address, obj._pointer._size, None, type="pointer")
             if self.align_width:
                 address = obj._address
             else:
@@ -295,11 +311,11 @@ class DatamijnBrowser():
                 if i == 7:
                     text.append(' ')
             text.append(('name', f'\n'))
-            continue_focus = False
+            continue_focus = None
             
             for i in range(40):
                 text.append(('name', f'{address:08x} '))
-                text.append(('focus' if continue_focus else 'body', f' '))
+                text.append((continue_focus or 'body', f' '))
                 line = []
                 explain_names = []
                 for j in range(16):
@@ -320,32 +336,54 @@ class DatamijnBrowser():
                         space = '  ' if j == 7 else ' '
                         if not cur_child:
                             line.append(('body', f'{byte:02x}{space}'))
-                            continue_focus = False
+                            continue_focus = None
                         else:
-                            line.append(('focus', f'{byte:02x}'))
+                            if cur_child.type == 'pointer':
+                                continue_focus = 'focus_pointer'
+                            else:
+                                continue_focus = 'focus'
+                            line.append((continue_focus, f'{byte:02x}'))
                             if address == cur_child.end_address-1:
                                 line.append(('body', space))
-                                continue_focus = False
+                                continue_focus = None
                             else:
-                                line.append(('focus', space))
-                                continue_focus = True
+                                line.append((continue_focus, space))
+                                continue_focus = continue_focus
                     address += 1
                 line.append(('body', '\n'))
                 if self.explain:
                     explain_columns = [j for j, n in explain_names]
+                    
+                    explain_rows = []
+                    last_col = None
                     for j, explain_name in reversed(explain_names):
-                        col_str = ""
-                        for j2 in range(j):
-                            space = " " if j2==7 else ""
-                            if j2 in explain_columns:
-                                col_str += "|  " + space
-                            else:
-                                col_str += "   " + space
+                        col = j*3 + (j==7)
+                        if last_col == None or col + len(explain_name)+1 - (j==7) > last_col:
+                            explain_rows.append([])
+                        explain_rows[-1].append((j, explain_name))
+                        last_col = col
+                    
+                    for row in explain_rows:
                         line += [
-                            ('body', " "*10 + col_str + '`'),
-                            ('name', explain_name),
-                        #    ('body', explain_value)
+                            ('body', " "*10)
                         ]
+                        last_j = 0
+                        for j, explain_name in reversed(row):
+                            col_str = ""
+                            for j2 in range(last_j, j):
+                                space = " " if j2==7 else ""
+                                if j2 in explain_columns:
+                                    line += "|  " + space
+                                else:
+                                    #line += f"{j2:x}  " + space
+                                    line += f"   " + space
+                            namepadlen = (3 - ((len(explain_name)+1) % 3)) % 3
+                            if j == 7: namepadlen += 1
+                            line += [
+                                "`",
+                                ('name', explain_name + " "*namepadlen)
+                            ]
+                            last_j = j + (len(explain_name)+1+namepadlen) // 3
                         line.append(('body', '\n'))
                 text += line
         

@@ -94,6 +94,7 @@ class Primitive():
             obj._address = address
             obj._size = length
             obj._path = path
+            
         return obj
     
     @classmethod
@@ -199,8 +200,35 @@ class Word(Primitive, bytes):
             raise ParseError(path, "Failed to read stream")
         return read
 
+def run_on_super_and_copy_attributes(function, self, other):
+    res = getattr(int(self), function)(other)
+    newobj = IntPrimitive.__new__(IntPrimitive, res)
+    pass_from = None
+    if hasattr(self, '_address'):
+        pass_from = self
+    elif hasattr(other, '_address'):
+        pass_from = other
+    
+    if not self._size and hasattr(other, '_address') and other._size:
+        pass_from = other
+    # TODO pass both (_ingredients)
+    
+    if pass_from:
+        for attr in '_path _size _address _pointer'.split():
+            if hasattr(pass_from, attr):
+                setattr(newobj, attr, getattr(pass_from, attr))        
+    return newobj
+
 class IntPrimitive(Primitive, int):
     _root_name = None
+    
+    # This is necessary to properly propagate a subclassed int in Python.
+    __add__ = lambda self, other: run_on_super_and_copy_attributes('__add__', self, other)
+    __sub__ = lambda self, other: run_on_super_and_copy_attributes('__sub__', self, other)
+    __mul__ = lambda self, other: run_on_super_and_copy_attributes('__mul__', self, other)
+    __floordiv__ = lambda self, other: run_on_super_and_copy_attributes('__floordiv__', self, other)
+    __mod__ = lambda self, other: run_on_super_and_copy_attributes('__mod__', self, other)
+    
     def __repr__(self):
         #return f"{self.__class__.__name__}({int(self)})"
         if self._root_name == self.__class__.__name__:
@@ -394,6 +422,9 @@ class Array(Primitive):
     def _save(self, ctx, path):
         for i, elem in enumerate(self):
             elem._save(ctx, path + [i])
+            
+    def __repr__(self):
+        return f"{type(self).__name__}"
     
     def _pretty_repr(self):
         #name = type(self).__name__
@@ -706,13 +737,13 @@ class ExprName(Primitive):
         
         raise ParseError(path, f"Cannot resolve name {self._name}")
 
-class ExprInt(Primitive):
-    _final = True
-    _final_type = int
+class ExprInt(IntPrimitive):
+    #_final = True
+    _final_type = IntPrimitive
     #_int
     
     @classmethod
-    def parse_stream(self, stream, ctx, path, index=None, **kwargs):
+    def _parse_stream(self, stream, ctx, path, index=None, **kwargs):
         return self._int
 
 class ExprString(Primitive):
@@ -823,15 +854,15 @@ class Return(Primitive):
     def parse_stream(self, stream, ctx, path, index=None, **kwargs):
         return self._expr.parse_stream(stream, ctx, path, index=index, **kwargs)
 
-class Index(Primitive):
-    _final_type = int
+class Index(IntPrimitive):
+    _final_type = IntPrimitive
     
     @classmethod
-    def parse_stream(self, stream, ctx, path, index=None, **kwargs):
+    def _parse_stream(self, stream, ctx, path, index=None, **kwargs):
         return index
 
-class Position(Primitive, int):
-    _final_type = int
+class Position(IntPrimitive):
+    _final_type = IntPrimitive
     
     @classmethod
     def _parse_stream(self, stream, ctx, path, index=None, **kwargs):
@@ -885,6 +916,10 @@ class Pointer(Primitive):
         obj = self.__new__(self, result)
         obj.__init__(result)
         if rich:
+            if hasattr(result, '_address'):
+                obj._path = result._path
+                obj._address = result._address
+                obj._size = result._size
             obj._pointer = address
         
         return obj

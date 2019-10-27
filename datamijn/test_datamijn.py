@@ -2,6 +2,7 @@ import pytest
 import os
 
 import datamijn
+import datamijn.dmtypes as dmtypes
 import datamijn.utils
 import datamijn.gfx
 
@@ -262,6 +263,7 @@ vals            @val_ptr [val_count] U8
     data = b('1000' + '03' + '00'*13 + 'aabbcc')
     result = datamijn.parse(db, data)
     assert result.vals == [0xaa, 0xbb, 0xcc]
+    assert isinstance(result.vals, dmtypes.Array)
 
 def test_pointer_computed():
     dm = """
