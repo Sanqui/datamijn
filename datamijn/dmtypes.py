@@ -202,6 +202,8 @@ class Word(Primitive, bytes):
 
 def run_on_super_and_copy_attributes(function, self, other):
     res = getattr(int(self), function)(other)
+    if res == NotImplemented:
+        return NotImplemented
     newobj = IntPrimitive.__new__(IntPrimitive, res)
     pass_from = None
     if hasattr(self, '_address'):

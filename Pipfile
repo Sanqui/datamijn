@@ -11,6 +11,7 @@ pypng = "*"
 oyaml = "*"
 profiling = "*"
 urwid = "*"
+click = "*"
 
 [dev-packages]
 
