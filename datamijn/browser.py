@@ -48,6 +48,9 @@ class DatamijnBrowserTreeWidget(urwid.TreeWidget):
             if broken_value:
                 valuetext += [(body_color, "(broken)")]
             else:
+                if isinstance(value, RGBColor):
+                    valuetext += text_from_color(value)
+                    valuetext += [(body_color, value.hex)]
                 if isinstance(value, String):
                     valuetext += [("string", "\""+str(value)+"\"")]
                 elif hasattr(value, 'name'):
@@ -188,6 +191,9 @@ class DatamijnBrowser():
         ('key', " align "),
         ('key_invert', "E"),
         ('key', " explain "),
+        ('key_invert', "["),
+        ('key', "/"),
+        ('key_invert', "'"),
         #('key', "UP"), ",", ('key', "DOWN"), ",",
         #('key', "PAGE UP"), ",", ('key', "PAGE DOWN"),
         #"  ",
@@ -233,9 +239,18 @@ class DatamijnBrowser():
         
         self.align_width = False
         self.explain = False
+        self.scroll_hex = 0
+        self.last_obj = None
+        
+        self.modified_signal()
     
     def modified_signal(self):
         obj = self.treewalker.get_focus()[1].get_value()
+        
+        if obj != self.last_obj:
+            self.scroll_hex = 0
+        if self.scroll_hex < 0: self.scroll_hex = 0
+        
         broken_obj = False
         obj_error = ""
         try:
@@ -301,8 +316,10 @@ class DatamijnBrowser():
                 get_childs_from(obj, None)
             if self.align_width:
                 address = obj._address
+                address += self.scroll_hex
             else:
                 address = max(obj._address - (obj._address % 0x10) - 0x10, 0)
+                address += self.scroll_hex*0x10
             last_child = None
             cur_child = None
             self.file.seek(address)
@@ -389,6 +406,8 @@ class DatamijnBrowser():
                 text += line
         
         self.info.set_text(text)
+        
+        self.last_obj = obj
 
     def main(self):
         self.screen = urwid.raw_display.Screen()
@@ -399,6 +418,7 @@ class DatamijnBrowser():
 
     def unhandled_input(self, k):
         if k in ('a', 'A'):
+            self.scroll_hex = 0
             self.align_width = not self.align_width
             self.modified_signal()
         if k in ('e', 'E'):
@@ -406,4 +426,12 @@ class DatamijnBrowser():
             self.modified_signal()
         if k in ('q', 'Q'):
             raise urwid.ExitMainLoop()
+        if k in ('[',):
+            self.scroll_hex -= 1
+            self.modified_signal()
+        if k in ('\'',):
+            self.scroll_hex += 1
+            self.modified_signal()
+            
+            
 
