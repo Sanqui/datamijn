@@ -14,5 +14,7 @@ setup(name='datamijn',
         'construct',
         'pypng',
         'oyaml'
+        'click',
+        'urwid',
       ],
       zip_safe=False)
