@@ -188,8 +188,9 @@ Attempted to inherit {left_type.__name__} from {name}""")
             return ExprName.new(f"{name}", _name=name)
     
     def expr_int(self, f):
+        type_ = ExprHex if f[0].startswith("0x") else ExprInt
         num = eval(f[0])
-        return ExprInt.new(f"{num}", _int=num)
+        return type_.new(_int=num)
     
     def expr_string(self, token):
         string = str(token[0])
@@ -301,7 +302,7 @@ Attempted to inherit {left_type.__name__} from {name}""")
         fields = []
         
         for symbol, addr in symbols.items():
-            fields.append((symbol, ExprInt.new(symbol, _int=addr)))
+            fields.append((symbol, ExprHex.new(None, _int=addr)))
         
         return ("sym", LenientContainer.new(f"SymfileContainer({token[0]})", _fields=fields, _return=[]))
         

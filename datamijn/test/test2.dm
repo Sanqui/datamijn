@@ -73,3 +73,15 @@ gfx {
 }
 
 addition    U8 + U8
+
+:Selfref {
+    a {
+        test U8
+    }
+    x a.test match {
+        32 => Selfref
+        x => x
+    }
+}
+
+selfref Selfref

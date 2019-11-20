@@ -222,7 +222,7 @@ def run_on_super_and_copy_attributes(function, self, other):
     return newobj
 
 class IntPrimitive(Primitive, int):
-    _root_name = None
+    _root_name = "IntPrimitive"
     
     # This is necessary to properly propagate a subclassed int in Python.
     __add__ = lambda self, other: run_on_super_and_copy_attributes('__add__', self, other)
@@ -237,6 +237,15 @@ class IntPrimitive(Primitive, int):
             return str(int(self))
         else:
             return f"{self.__class__.__name__}({int(self)})"
+
+class HexPrimitive(IntPrimitive):
+    _root_name = "HexPrimitive"
+    
+    def __repr__(self):
+        if self._root_name == self.__class__.__name__:
+            return hex(int(self))
+        else:
+            return f"{self.__class__.__name__}({hex(int(self))})"
 
 class BitType(IntPrimitive, int):
     _size = None
@@ -502,10 +511,12 @@ class Container(dict, Primitive):
                 name = field.__name__
                 if name[0] not in UPPERCASE + "!":
                     raise ResolveError(path, f"{name}: Type names must start with an uppercase letter.")
+                self._types[name] = NestedExprName.new(name, _name=name) # stub the type
                 resolved = type_.resolve(ctx, path + [name])
                 if resolved._embed:
                     self._types.update(resolved._types)
                 else:
+                    self._types[name]._replacement = resolved
                     self._types[name] = resolved
             else:
                 if not self._lenient and name and isinstance(name, str) and name[0] in UPPERCASE:
@@ -739,7 +750,18 @@ class ExprName(Primitive):
         
         raise ParseError(path, f"Cannot resolve name {self._name}")
 
+class NestedExprName(ExprName):
+    @classmethod
+    def resolve(self, ctx, path):
+        return self
+    
+    @classmethod
+    def parse_stream(self, stream, ctx, path, index=None, **kwargs):
+        newtype = self._replacement
+        return newtype.parse_stream(stream, ctx, path, index=index, **kwargs)
+
 class ExprInt(IntPrimitive):
+    _root_name = "ExprInt"
     #_final = True
     _final_type = IntPrimitive
     #_int
@@ -747,6 +769,13 @@ class ExprInt(IntPrimitive):
     @classmethod
     def _parse_stream(self, stream, ctx, path, index=None, **kwargs):
         return self._int
+
+
+class ExprHex(ExprInt, HexPrimitive):
+    _root_name = "ExprHex"
+    #_final = True
+    _final_type = HexPrimitive
+    #_int
 
 class ExprString(Primitive):
     _final = True
@@ -774,6 +803,9 @@ class ExprOp(Primitive):
         if hasattr(self._left.infer_type(), type_func_name):
             transformed_type = getattr(self._left.infer_type(), type_func_name)(self._right.infer_type())
         
+        # This is a basic sanity check, but it's a bit crazy yet doesn't cover
+        # all cases.
+        
         if self._left.infer_type() != self._right.infer_type() \
             and not issubclass(self._left.infer_type(), self._right.infer_type()) \
             and not issubclass(self._right.infer_type(), self._left.infer_type()) \
@@ -784,7 +816,9 @@ class ExprOp(Primitive):
                 self._left.infer_type()._child_type.infer_type() == self._right.infer_type()._child_type.infer_type() \
                 or self._left.infer_type()._child_type.infer_type().__name__ == self._right.infer_type()._child_type.infer_type().__name__
               ) # XXX more type string comparison
-            ) and not transformed_type:
+            ) \
+            and not self._left.infer_type().__bases__[0] in self._right.infer_type().__bases__ \
+            and not transformed_type:
                 raise ResolveError(path, f"Both types in an `{self._op.__name__}` expression have to match or be compatible.\n{full_type_name(self._left.infer_type())} != {full_type_name(self._right.infer_type())}")
         
         self._yields = self._left._yields or self._right._yields
@@ -857,6 +891,7 @@ class Return(Primitive):
         return self._expr.parse_stream(stream, ctx, path, index=index, **kwargs)
 
 class Index(IntPrimitive):
+    _root_name = "Index"
     _final_type = IntPrimitive
     
     @classmethod
@@ -1065,7 +1100,11 @@ class MatchType(Primitive, metaclass=MatchTypeMetaclass):
                 ctx_extra = {}
                 if self._default_key:
                     ctx_extra = {str(self._default_key): value}
-                return self._match[self._default_key].parse_stream(stream, ctx + [ctx_extra], path + [f"[_]"], **kwargs)
+                # XXX this makes sense e.g. for pokered.type_effectiveness
+                obj = self._match[self._default_key].parse_stream(stream, ctx + [ctx_extra], path + [f"[_]"], **kwargs)
+                obj._address = value._address
+                obj._size += value._size
+                return obj
             else:
                 # XXX improve this error
                 raise Exception(f"Parsed value {value}, but not present in match.\nPath: {'.'.join(str(x) for x in path)}")
@@ -1259,6 +1298,9 @@ class ForeignKey(Primitive):
         
     def __repr__(self):
         return f"{type(self).__name__}({repr(self._key)}, {repr(self._field_name)})"
+    
+    def __str__(self):
+        return str(self._object)
 
 class ForeignListAssignment():
     def __init__(self, name):

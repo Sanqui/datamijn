@@ -249,7 +249,6 @@ class DatamijnBrowser():
         
         if obj != self.last_obj:
             self.scroll_hex = 0
-        if self.scroll_hex < 0: self.scroll_hex = 0
         
         broken_obj = False
         obj_error = ""
@@ -295,9 +294,8 @@ class DatamijnBrowser():
             childs_at = {}
         
             def get_childs_from(obj, name):
-                if not hasattr(obj, '_address'):
-                    return
-                childs_at[obj._address] = HexViewerChild(obj._address, obj._size, name)
+                if hasattr(obj, '_address'):
+                    childs_at[obj._address] = HexViewerChild(obj._address, obj._size, name)
                 if hasattr(obj, '_pointer') and hasattr(obj._pointer, '_address'):
                     childs_at[obj._pointer._address] = HexViewerChild(obj._pointer._address, obj._pointer._size, f"{name} ptr", type="pointer")
                 if hasattr(obj, '_key') and hasattr(obj._key, '_address'):
@@ -306,7 +304,6 @@ class DatamijnBrowser():
             if isinstance(obj, ForeignKey):
                 obj = obj._object
             if isinstance(obj, Array) and not isinstance(obj, String):
-                # XXX this expects linear arrays.
                 for i, child in enumerate(obj):
                     get_childs_from(child, i)
             elif isinstance(obj, Container):
@@ -320,6 +317,8 @@ class DatamijnBrowser():
             else:
                 address = max(obj._address - (obj._address % 0x10) - 0x10, 0)
                 address += self.scroll_hex*0x10
+            if address < 0:
+                address = 0
             last_child = None
             cur_child = None
             self.file.seek(address)
@@ -353,6 +352,9 @@ class DatamijnBrowser():
                             cur_child = childs_at[address]
                             if self.explain and cur_child.name:
                                 explain_names.append((j, cur_child.name))
+                            if not cur_child.size:
+                                last_child = cur_child
+                                cur_child = None
                         byte = ord(self.file.read(1))
                         space = '  ' if j == 7 else ' '
                         if not cur_child:
