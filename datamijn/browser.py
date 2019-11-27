@@ -2,7 +2,7 @@
 # See https://github.com/urwid/urwid/blob/master/examples/browse.py
 import urwid
 import math
-from datamijn.dmtypes import Container, Array, String, ForeignKey, ForeignKeyError
+from datamijn.dmtypes import Struct, Array, String, ForeignKey, ForeignKeyError
 from datamijn.gfx import RGBColor, Palette, Tile
 from datamijn.utils import full_type_name
 
@@ -58,7 +58,7 @@ class DatamijnBrowserTreeWidget(urwid.TreeWidget):
                 elif isinstance(value, Palette) and len(value) < 32:
                     for color in value:
                         valuetext += text_from_color(color, space=False)
-                elif not isinstance(value, Container) and not isinstance(value, Array):
+                elif not isinstance(value, Struct) and not isinstance(value, Array):
                     valuetext += [(body_color, repr(value))]
         else:
             if isinstance(value, Tile):
@@ -114,7 +114,7 @@ class DatamijnBrowserParentNode(urwid.ParentNode):
 
     def load_child_keys(self):
         def load_keys(data):
-            if isinstance(data, Container):
+            if isinstance(data, Struct):
                 #return list(data.keys())
                 if self.show_private:
                     return list(data.keys())
@@ -148,7 +148,7 @@ class DatamijnBrowserParentNode(urwid.ParentNode):
             childclass = DatamijnBrowserNode
         else:
             childdata = value[key]
-            if isinstance(childdata, Container) or isinstance(childdata, Array) \
+            if isinstance(childdata, Struct) or isinstance(childdata, Array) \
               or isinstance(childdata, ForeignKey) or isinstance(childdata, Tile):
                 childclass = DatamijnBrowserParentNode
             else:

@@ -27,7 +27,7 @@ match_field: match_key? expr        _NL+
 
 match: "match" "{" _NL match_field+ "}"
 
-container: "{" _NL+ field* "}"
+struct: "{" _NL+ field* "}"
 
 count: "[" expr2 "]"
      | "[" "]"
@@ -71,7 +71,7 @@ expr7: expr8                    -> expr
     | expr6 "." NAME            -> expr_attr
 
 expr8: NAME                     -> expr_name
-    | container                 -> expr_container
+    | scruct                    -> expr_struct
     | NUM                       -> expr_int
     | string                    -> expr_string
     | "(" expr1 ")"             -> expr_bracket
@@ -87,7 +87,7 @@ field_name: NAME                    -> field_name
 field: "=" expr _NL+                      -> field_return
      | field_name expr _NL+               -> field_instance
      | typedef _NL+                       -> field_typedef
-     | "!if" expr container ("!else" container)? _NL+ -> field_if
+     | "!if" expr struct ("!else"struct)? _NL+ -> field_if
      | /\!assert(.*)/ _NL+                -> field_assert
      | "!save" field_name _NL+            -> field_save
      | "!debug" field_name _NL+           -> field_debug
@@ -100,5 +100,5 @@ _NL: COMMENT? /(\r?\n[\t ]*)+/
              | "!symfile" NAME _NL+ -> statement_symfile
              | field
 
-start: _NL* topstatement*           -> container
+start: _NL* topstatement*           -> struct
 

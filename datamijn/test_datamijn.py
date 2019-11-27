@@ -194,7 +194,7 @@ bytes   [count]U8
     result = datamijn.parse(dm, b('aabb'))
     assert result.bytes == [0xaa, 0xbb]
 
-def test_container_computed_value():
+def test_struct_computed_value():
     dm = """
 :Test    {
     x       U8

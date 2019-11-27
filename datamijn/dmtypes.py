@@ -36,7 +36,7 @@ class IOWithBits(BufferedIOBase):
             raise RuntimeError("Attempting to read bytes while not byte-aligned")
         return super().read(amount)
 
-class Primitive():
+class DatamijnObject():
     _size = None
     _char = False
     _embed = False
@@ -108,7 +108,7 @@ class Primitive():
     @classmethod
     def infer_type(self):
         if self._final_type != None and self._final_type != self:
-            if issubclass(self._final_type, Primitive):
+            if issubclass(self._final_type, DatamijnObject):
                 return self._final_type.infer_type()
             else:
                 return self._final_type
@@ -123,13 +123,13 @@ class Primitive():
         raise NotImplementedError()
         return f"{self.__class__.__name__}"
     
-#class PipedPrimitive(Primitive):
+#class PipedDatamijnObject(DatamijnObject):
 #    _pipeable = True
 #    @classmethod
 #    def parse_left(self, left, ctx, path, index=None):
 #        raise NotImplementedError()
 
-class Token(Primitive):
+class Token(DatamijnObject):
     _size = 0
     def __init__(self, self_=None):
         pass
@@ -158,7 +158,7 @@ class Token(Primitive):
 
 class Terminator(Token): pass
 
-class Null(Primitive):
+class Null(DatamijnObject):
     _size = 0
     @classmethod
     def resolve(self, ctx, path):
@@ -168,7 +168,7 @@ class Null(Primitive):
     def parse_stream(self, stream, ctx, path, index=None, **kwargs):
         return None
 
-class Byte(Primitive, bytes):
+class Byte(DatamijnObject, bytes):
     _size = 1
     @classmethod
     def _parse_stream(self, stream, ctx, path, index=None, **kwargs):
@@ -182,7 +182,7 @@ class Byte(Primitive, bytes):
         if issubclass(other, int):
             return bytes
 
-class Short(Primitive, bytes):
+class Short(DatamijnObject, bytes):
     _size = 2
     @classmethod
     def _parse_stream(self, stream, ctx, path, index=None, **kwargs):
@@ -191,7 +191,7 @@ class Short(Primitive, bytes):
             raise ParseError(path, "Failed to read stream")
         return read
 
-class Word(Primitive, bytes):
+class Word(DatamijnObject, bytes):
     _size = 4
     @classmethod
     def _parse_stream(self, stream, ctx, path, index=None, **kwargs):
@@ -204,7 +204,7 @@ def run_on_super_and_copy_attributes(function, self, other):
     res = getattr(int(self), function)(other)
     if res == NotImplemented:
         return NotImplemented
-    newobj = IntPrimitive.__new__(IntPrimitive, res)
+    newobj = DatamijnInt.__new__(DatamijnInt, res)
     pass_from = None
     if hasattr(self, '_address'):
         pass_from = self
@@ -221,8 +221,8 @@ def run_on_super_and_copy_attributes(function, self, other):
                 setattr(newobj, attr, getattr(pass_from, attr))        
     return newobj
 
-class IntPrimitive(Primitive, int):
-    _root_name = "IntPrimitive"
+class DatamijnInt(DatamijnObject, int):
+    _root_name = "DatamijnInt"
     
     # This is necessary to properly propagate a subclassed int in Python.
     __add__ = lambda self, other: run_on_super_and_copy_attributes('__add__', self, other)
@@ -238,8 +238,8 @@ class IntPrimitive(Primitive, int):
         else:
             return f"{self.__class__.__name__}({int(self)})"
 
-class HexPrimitive(IntPrimitive):
-    _root_name = "HexPrimitive"
+class HexDatamijnObject(DatamijnInt):
+    _root_name = "HexDatamijnObject"
     
     def __repr__(self):
         if self._root_name == self.__class__.__name__:
@@ -247,7 +247,7 @@ class HexPrimitive(IntPrimitive):
         else:
             return f"{self.__class__.__name__}({hex(int(self))})"
 
-class BitType(IntPrimitive, int):
+class DatamijnBits(DatamijnInt, int):
     _size = None
     _num_bits = None
     @classmethod
@@ -255,7 +255,7 @@ class BitType(IntPrimitive, int):
         value = stream.read_bits(self._num_bits)
         return value
 
-class B1(IntPrimitive, int):
+class B1(DatamijnInt, int):
     _root_name = "B1"
     _size = None
     _num_bits = 1
@@ -265,9 +265,9 @@ class B1(IntPrimitive, int):
         return value
 
 def make_bit_type(num_bits):
-    return type(f"B{num_bits}", (BitType,), {"_num_bits": num_bits, "_root_name": f"B{num_bits}"})
+    return type(f"B{num_bits}", (DatamijnBits,), {"_num_bits": num_bits, "_root_name": f"B{num_bits}"})
 
-class U8(IntPrimitive, int):
+class U8(DatamijnInt, int):
     _root_name = "U8"
     _size = 1
     @classmethod
@@ -276,7 +276,7 @@ class U8(IntPrimitive, int):
         value = ord(data)
         return value
 
-class U16(IntPrimitive, int):
+class U16(DatamijnInt, int):
     _root_name = "U16"
     _size = 2
     @classmethod
@@ -285,7 +285,7 @@ class U16(IntPrimitive, int):
         value = data[0] | (data[1] << 8)
         return value
 
-class U32(IntPrimitive):
+class U32(DatamijnInt):
     _root_name = "U32"
     _size = 4
     @classmethod
@@ -294,7 +294,7 @@ class U32(IntPrimitive):
         value = data[0] | (data[1] << 8) | (data[2] << 16) | (data[3] << 24)
         return value
 
-class Array(Primitive):
+class Array(DatamijnObject):
     # _child_type
     # _length
     _concat = False
@@ -444,7 +444,7 @@ class Array(Primitive):
         #out = f"{name} [\n"
         out = f"[\n"
         for val in self:
-            if isinstance(val, Container) or isinstance(val, Array):
+            if isinstance(val, Struct) or isinstance(val, Array):
                 valrepr = "\n  ".join(val._pretty_repr().split('\n'))
             else:
                 valrepr = repr(val)
@@ -488,7 +488,7 @@ class ByteString(bytes, Array):
     def _pretty_repr(self):
         return repr(self)
 
-class Container(dict, Primitive):
+class Struct(dict, DatamijnObject):
     _lenient = False
     _rich = True
     
@@ -506,7 +506,7 @@ class Container(dict, Primitive):
             self._fields.insert(0, (None, stdlib))
         
         for name, field in self._fields:
-            if name == None and isinstance(field, type) and issubclass(field, Primitive) and not issubclass(field, Yield):
+            if name == None and isinstance(field, type) and issubclass(field, DatamijnObject) and not issubclass(field, Yield):
                 type_ = field
                 name = field.__name__
                 if name[0] not in UPPERCASE + "!":
@@ -579,7 +579,7 @@ class Container(dict, Primitive):
                     size_extra += result._size - result_size
             if name:
                 obj[name] = result
-            elif isinstance(result, Container) and result._embed:
+            elif isinstance(result, Struct) and result._embed:
                 obj.update(result)
         
         if self._return:
@@ -632,10 +632,10 @@ class Container(dict, Primitive):
     
     @classmethod
     def _or_type(self, other):
-        if not issubclass(other, Container):
+        if not issubclass(other, Struct):
             return None
         if set(n for n, t in self._contents.items() if not n.startswith("_")) != set(n for n, t in other._contents.items() if not n.startswith("_")):
-            raise TypeError(f"Piped containers must have matching fields")
+            raise TypeError(f"Piped structs must have matching fields")
         
         # TODO this should return a properly piped type of the result!!!!! XXX
         
@@ -643,10 +643,10 @@ class Container(dict, Primitive):
         
     
     def __or__(self, other):
-        if not isinstance(other, Container):
+        if not isinstance(other, Struct):
             return NotImplemented
         if set(n for n, t in self._contents.items() if not n.startswith("_")) != set(n for n, t in other._contents.items() if not n.startswith("_")):
-            raise TypeError(f"Piped containers must have matching fields")
+            raise TypeError(f"Piped structs must have matching fields")
         
         newdict = {}
         for key0 in self:
@@ -678,13 +678,13 @@ class Container(dict, Primitive):
     
     def _pretty_repr(self):
         name = type(self).__name__
-        if name == "Container":
+        if name == "Struct":
             name = ""
         out = f"{name} {'{'}\n"
         for name, type_ in self._contents.items():
             if isinstance(name, tuple): continue
             if not name: continue
-            if isinstance(self[name], Container) or isinstance(self[name], Array):
+            if isinstance(self[name], Struct) or isinstance(self[name], Array):
                 valrepr = "\n  ".join(self[name]._pretty_repr().split('\n'))
             else:
                 valrepr = repr(self[name])
@@ -695,7 +695,7 @@ class Container(dict, Primitive):
             out = out.replace("\n", "")
         return out.strip()
 
-class LenientContainer(Container):
+class LenientStruct(Struct):
     """
         Doesn't care about field names.  Typically they must start
         with a lowercase letter.
@@ -703,7 +703,7 @@ class LenientContainer(Container):
     _lenient = True
 
 
-class ExprName(Primitive):
+class ExprName(DatamijnObject):
     #_name
     
     @classmethod
@@ -760,10 +760,10 @@ class NestedExprName(ExprName):
         newtype = self._replacement
         return newtype.parse_stream(stream, ctx, path, index=index, **kwargs)
 
-class ExprInt(IntPrimitive):
+class ExprInt(DatamijnInt):
     _root_name = "ExprInt"
     #_final = True
-    _final_type = IntPrimitive
+    _final_type = DatamijnInt
     #_int
     
     @classmethod
@@ -771,13 +771,13 @@ class ExprInt(IntPrimitive):
         return self._int
 
 
-class ExprHex(ExprInt, HexPrimitive):
+class ExprHex(ExprInt, HexDatamijnObject):
     _root_name = "ExprHex"
     #_final = True
-    _final_type = HexPrimitive
+    _final_type = HexDatamijnObject
     #_int
 
-class ExprString(Primitive):
+class ExprString(DatamijnObject):
     _final = True
     _final_type = str
     #_string
@@ -786,7 +786,7 @@ class ExprString(Primitive):
     def parse_stream(self, stream, ctx, path, index=None, **kwargs):
         return self._string
 
-class ExprOp(Primitive):
+class ExprOp(DatamijnObject):
     #_left
     #_right
     #_op
@@ -834,14 +834,14 @@ class ExprOp(Primitive):
         right = self._right.parse_stream(stream, ctx, path, index=index, **kwargs)
         return self._op(left, right)
 
-class ExprAttr(Primitive):
+class ExprAttr(DatamijnObject):
     #_left
     #_name
     @classmethod
     def resolve(self, ctx, path):
         self._left = self._left.resolve(ctx, path)
-        if not issubclass(self._left.infer_type(), Container):
-            raise ResolveError(path, f"Only containers may be attributed, not {full_type_name(self._left.infer_type())}.")
+        if not issubclass(self._left.infer_type(), Struct):
+            raise ResolveError(path, f"Only structs may be attributed, not {full_type_name(self._left.infer_type())}.")
         
         self._yields = self._left._yields
         self._final_type = dict(self._left.infer_type()._contents)[self._name].infer_type()
@@ -852,7 +852,7 @@ class ExprAttr(Primitive):
         left = self._left.parse_stream(stream, ctx, path, index=index, **kwargs)
         return left[self._name]
 
-class ExprIndex(Primitive):
+class ExprIndex(DatamijnObject):
     #_left
     #_index
     @classmethod
@@ -875,7 +875,7 @@ class ExprIndex(Primitive):
         index = self._index.parse_stream(stream, ctx, path, index=index, **kwargs)
         return left[index]
 
-class Return(Primitive):
+class Return(DatamijnObject):
     #_expr
     
     @classmethod
@@ -890,22 +890,22 @@ class Return(Primitive):
     def parse_stream(self, stream, ctx, path, index=None, **kwargs):
         return self._expr.parse_stream(stream, ctx, path, index=index, **kwargs)
 
-class Index(IntPrimitive):
+class Index(DatamijnInt):
     _root_name = "Index"
-    _final_type = IntPrimitive
+    _final_type = DatamijnInt
     
     @classmethod
     def _parse_stream(self, stream, ctx, path, index=None, **kwargs):
         return index
 
-class Position(IntPrimitive):
-    _final_type = IntPrimitive
+class Position(DatamijnInt):
+    _final_type = DatamijnInt
     
     @classmethod
     def _parse_stream(self, stream, ctx, path, index=None, **kwargs):
         return stream.tell()
 
-class RightSize(Primitive):
+class RightSize(DatamijnObject):
     _final_type = int
     
     @classmethod
@@ -914,7 +914,7 @@ class RightSize(Primitive):
             if '_right_size' in x:
                 return x['_right_size']
 
-class Pointer(Primitive):
+class Pointer(DatamijnObject):
     _namestring = "@({_addr.__name__})({_type.__name__})"
     #_type
     #_addr
@@ -976,7 +976,7 @@ class PipePointer(Pointer):
         pipebuffer.seek(pos)
         return result
 
-class Yield(Primitive):
+class Yield(DatamijnObject):
     _yields = True
     @classmethod
     def resolve(self, ctx, path):
@@ -996,14 +996,14 @@ class Yield(Primitive):
         pipestream.append(data)
         return None
 
-class MatchResult(Primitive):
+class MatchResult(DatamijnObject):
     _concat = False
     #_key
     
     def __init__(self, dummy=None):
         pass
 
-class ConcatableMatchResult(Primitive):
+class ConcatableMatchResult(DatamijnObject):
     _concat = True
 
 # TODO explain why this is a thing ('cause I forgot)
@@ -1014,7 +1014,7 @@ class MatchTypeMetaclass(type):
         else:
             raise AttributeError()
 
-class MatchType(Primitive, metaclass=MatchTypeMetaclass):
+class MatchType(DatamijnObject, metaclass=MatchTypeMetaclass):
     _concat_result = False
     @classmethod
     def resolve(self, ctx, path):
@@ -1077,7 +1077,7 @@ class MatchType(Primitive, metaclass=MatchTypeMetaclass):
                 self._default_key = key
         
         self._match_types = {v.__name__: v for k, v in self._match.items()
-            if isinstance(v, type) and issubclass(v, Primitive)}
+            if isinstance(v, type) and issubclass(v, DatamijnObject)}
         
         return self
     
@@ -1127,9 +1127,9 @@ class PipeStream(IOWithBits):
         self._free_bytes = 0
         
         if not issubclass(type_.infer_type(), bytes):
-            if issubclass(type_, Container):
+            if issubclass(type_, Struct):
                 if not type_._yields:
-                    raise TypeError(f"Attempting to pipe {full_type_name(type_.infer_type())}, which is a Container that does not yield.")
+                    raise TypeError(f"Attempting to pipe {full_type_name(type_.infer_type())}, which is a Struct that does not yield.")
             else:
                 raise TypeError(f"Attempting to pipe {full_type_name(type_.infer_type())}")
     
@@ -1137,11 +1137,11 @@ class PipeStream(IOWithBits):
         self._buffer.seek(0, 2) # SEEK_END
         while self._free_bytes < num:
             result = self._type.parse_stream(self._stream, self._ctx, self._path + ["<PipeStream>"], pipebuffer=self._buffer, pipestream=self) # XXX
-            if result != None and not (isinstance(result, Container) and result._is_empty()):
+            if result != None and not (isinstance(result, Struct) and result._is_empty()):
                 if not isinstance(result, bytes):
                     print(repr(result))
                     errormsg = f"Pipe received {type(result)}.  Only bytes may be passed through a pipe."
-                    if isinstance(result, Container):
+                    if isinstance(result, Struct):
                         errormsg += "\nHint: if you're yielding data, prefix your keys with _."
                     raise TypeError(errormsg)
                 self._free_bytes += len(result)
@@ -1172,7 +1172,7 @@ class PipeStream(IOWithBits):
     def __repr__(self):
         return (f"<{'.'.join(str(x) for x in self._path)} PipeStream>")
 
-class Pipe(Primitive):
+class Pipe(DatamijnObject):
     # _left_type
     # _right_type
     @classmethod
@@ -1182,7 +1182,7 @@ class Pipe(Primitive):
         if not self._left_type._yields \
           and not issubclass(self._left_type.infer_type(), ByteString) \
           and hasattr(self._left_type.infer_type(), "__or__"):
-          #and not (issubclass(self._right_type, PipedPrimitive) \
+          #and not (issubclass(self._right_type, PipedDatamijnObject) \
           #  and not issubclass(self._right_type, Pipe)):
             expr = ExprOp.new(f"({self._left_type.__name__}|{self._right_type.__name__})",
                 _left=self._left_type, _right=self._right_type, _op=operator.or_)
@@ -1197,7 +1197,7 @@ class Pipe(Primitive):
     
     @classmethod
     def parse_stream(self, stream, ctx, path, index=None, **kwargs):
-        if False: #issubclass(self._right_type, PipedPrimitive):
+        if False: #issubclass(self._right_type, PipedDatamijnObject):
             ctx = []
             left = self._left_type.parse_stream(stream, ctx, path, index=index, **kwargs)
             result = self._right_type.parse_left(left, ctx, path)
@@ -1209,7 +1209,7 @@ class Pipe(Primitive):
             except Exception as ex:
                 pass
             #ctx.append({'_right_size': right_size})
-            ctx.append(Container({'_right_size': right_size}))
+            ctx.append(Struct({'_right_size': right_size}))
             pipe_stream = PipeStream(stream, ctx, self._left_type, path=path)
             result = self._right_type.parse_stream(pipe_stream, ctx, path, **kwargs)
             #if not pipe_stream.empty:
@@ -1217,27 +1217,27 @@ class Pipe(Primitive):
             ctx.pop()
             return result
 
-class Inheritance(Primitive):
+class Inheritance(DatamijnObject):
     # _left_type
     # _right_type
     @classmethod
     def resolve(self, ctx, path):
-        if not issubclass(self._left_type, Container):
-            raise ResolveError(path, f"""Can only apply inheritance to Containers
+        if not issubclass(self._left_type, Struct):
+            raise ResolveError(path, f"""Can only apply inheritance to Structs
 Attempted to inherit {self._left_type.__name__} from {self._right_type.__name__}""")
         
         newtype = self._left_type.new(f"{self._left_type.__name__} {self._right_type.__name__}", bases=[self._right_type]).resolve(ctx, path)
         
         for field in self._right_type._inherited_fields:
             if field not in newtype._contents:
-                raise ResolveError(path, f"""Inherited Container must have the necessary inherited fields
+                raise ResolveError(path, f"""Inherited Struct must have the necessary inherited fields
 `{self._left_type.__name__}` is mising the field `{field}`
 `{self._right_type.__name__}` needs the following fields: {', '.join(self._right_type._inherited_fields)}""")
         
         return newtype
         
 
-class ForeignKey(Primitive):
+class ForeignKey(DatamijnObject):
     # _type
     # field_name
     def __init__(self, key, ctx):
@@ -1319,18 +1319,18 @@ class KeyRange():
         else:
             return NotImplemented
 
-class If(Primitive):
+class If(DatamijnObject):
     # _expr
-    # _true_container
-    # _false_container
+    # _true_struct
+    # _false_struct
     @classmethod
     def resolve(self, ctx, path):
         self._expr = self._expr.resolve(ctx, path)
-        self._true_container = self._true_container.resolve(ctx, path)
-        self._true_container._embed = True
-        if self._false_container:
-            self._false_container = self._false_container.resolve(ctx, path)
-            self._false_container._embed = True
+        self._true_struct = self._true_struct.resolve(ctx, path)
+        self._true_struct._embed = True
+        if self._false_struct:
+            self._false_struct = self._false_struct.resolve(ctx, path)
+            self._false_struct._embed = True
         
         return self
     
@@ -1339,10 +1339,10 @@ class If(Primitive):
         result = self._expr.parse_stream(stream, ctx, path, index=index, **kwargs)
         
         if result:
-            return self._true_container.parse_stream(stream, ctx, path, index=index, **kwargs)
+            return self._true_struct.parse_stream(stream, ctx, path, index=index, **kwargs)
         else:
-            if self._false_container:
-                return self._false_container.parse_stream(stream, ctx, path, index=index, **kwargs)
+            if self._false_struct:
+                return self._false_struct.parse_stream(stream, ctx, path, index=index, **kwargs)
             else:
                 return None
 
@@ -1373,6 +1373,7 @@ class DebugField(Field):
     
     def parse_stream(self, stream, ctx, path, index=None, **kwargs):
         foreign = ctx[-1][self._field_name]
+        print(foreign)
 
 Array.ARRAY_CLASSES.update({
         (Byte,):            ByteString,

@@ -85,7 +85,7 @@ class TreeToStruct(Transformer):
         self.match_last = -1
         return dict(tree)
     
-    def container(self, tree):
+    def struct(self, tree):
         fields = []
         return_ = None
         
@@ -94,8 +94,8 @@ class TreeToStruct(Transformer):
         
         for field in tree:
             if isinstance(field, type) and issubclass(field, Return):
-                raise SyntaxError("Return must be last in container") # TODO nicer error
-            if isinstance(field, type) and issubclass(field, Primitive):
+                raise SyntaxError("Return must be last in struct") # TODO nicer error
+            if isinstance(field, type) and issubclass(field, DatamijnObject):
                 fields.append((None, field))
             elif isinstance(field, Field):
                 fields.append((None, field))
@@ -103,9 +103,9 @@ class TreeToStruct(Transformer):
                 fields.append(field)
             else:
                 print(tree)
-                raise RuntimeError(f"Internal error: unknown container field {field}")
+                raise RuntimeError(f"Internal error: unknown struct field {field}")
         
-        return Container.new("Container", _fields=fields, _return=return_)
+        return Struct.new("Struct", _fields=fields, _return=return_)
     
     #
     # expr
@@ -196,7 +196,7 @@ Attempted to inherit {left_type.__name__} from {name}""")
         string = str(token[0])
         return ExprString.new(string, _string=string)
     
-    def expr_container(self, f):
+    def expr_struct(self, f):
         return f[0]
     
     def expr_count(self, f):
@@ -251,10 +251,10 @@ Attempted to inherit {left_type.__name__} from {name}""")
     
     def field_if(self, f):
         expr = f[0]
-        true_container = f[1]
-        false_container = f[2] if len(f) == 3 else []
+        true_struct = f[1]
+        false_struct = f[2] if len(f) == 3 else []
         
-        return (None, If.new("If", _expr=expr, _true_container=true_container, _false_container=false_container))
+        return (None, If.new("If", _expr=expr, _true_struct=true_struct, _false_struct=false_struct))
     
     def field_assert(self, f):
         cond = f[0][8:]
@@ -304,7 +304,7 @@ Attempted to inherit {left_type.__name__} from {name}""")
         for symbol, addr in symbols.items():
             fields.append((symbol, ExprHex.new(None, _int=addr)))
         
-        return ("sym", LenientContainer.new(f"SymfileContainer({token[0]})", _fields=fields, _return=[]))
+        return ("sym", LenientStruct.new(f"SymfileStruct({token[0]})", _fields=fields, _return=[]))
         
 grammar = open(os.path.dirname(__file__)+"/grammar.g").read()
 
