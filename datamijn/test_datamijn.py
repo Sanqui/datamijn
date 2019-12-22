@@ -388,6 +388,34 @@ string      [5]Char
     result = datamijn.parse(db, b("4342412100"))
     assert result.string == ["CBA!!", result.Char.End]
 
+def test_nested_match():
+    db = """
+test     [4] U8 match {
+    0    => 0
+    1    => U8 match {
+        1 => 11
+        2 => 12
+    }
+    2    => 2
+    0xff => Terminator
+}"""
+    result = datamijn.parse(db, b("00010102ff"))
+    assert result.test[0:3] == [0, 11, 2]
+
+def test_match_pointer_type():
+    db = """
+test     [4] U8 match {
+    0    => 0
+    1    => @U8 {
+        value   U8
+    }
+    0xff => Terminator
+}"""
+    result = datamijn.parse(db, b("00010500ffaa"))
+    assert result.test[0] == 0
+    assert result.test[1].value == 0xaa
+    assert result.test[2] == 0
+
 def test_bits():
     dm = """
 :SomeBits {

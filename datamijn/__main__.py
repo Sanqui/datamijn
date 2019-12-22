@@ -2,7 +2,7 @@ import click
 
 from datamijn.parsing import parse_definition, parse
 
-DATAMIJN_OUTPUTS = ["pretty_repr", "browser"]
+DATAMIJN_OUTPUTS = ["pretty_repr", "repl", "ipython", "browser"]
 
 @click.command('datamijn')
 @click.argument('struct-filename', type=click.Path(exists=True))
@@ -20,6 +20,14 @@ def cli(struct_filename, binary_filename, output, show_private):
         binary_file = open(binary_filename, "rb")
         from datamijn.browser import DatamijnBrowser
         DatamijnBrowser(result, file=binary_file, binary_filename=binary_filename, show_private=show_private).main()
+    elif output == "repl":
+        print("The result of the parse is available under `result`.")
+        import code
+        code.interact(local=locals())
+    elif output == "ipython":
+        print("The result of the parse is available under `result`.")
+        import IPython
+        IPython.embed()
     else:
         print(f"Unknown output mode {output_mode}")
 

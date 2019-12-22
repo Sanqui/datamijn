@@ -210,7 +210,7 @@ Attempted to inherit {left_type.__name__} from {name}""")
     def expr_ptr(self, f):
         addr = f[0]
         type_ = f[1]
-        return Pointer.make(f"@({addr.__name__})({type_.__name__})", _addr=addr, _type=type_)
+        return Pointer.make(None, _addr=addr, _type=type_)
     
     def expr_pipeptr(self, f):
         addr = f[0]

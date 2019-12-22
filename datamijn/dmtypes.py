@@ -96,6 +96,7 @@ class DatamijnObject():
         
         try:
             value = self._parse_stream(stream, ctx, path, index=index, **kwargs)
+            assert value != None
         except Exception as ex:
             raise Exception(f'{type(ex).__name__}: {ex}\nPath: {".".join(str(x) for x in path)}')
         
@@ -965,8 +966,9 @@ class Pointer(DatamijnObject):
         result = self._type.parse_stream(stream, ctx, path, **kwargs)
         stream.seek(pos)
         
-        obj = self.__new__(self, result)
-        obj.__init__(result)
+        #obj = self.__new__(self, result)
+        #obj.__init__(result)
+        obj = result
         if rich:
             if hasattr(result, '_address'):
                 obj._path = result._path
@@ -1065,7 +1067,9 @@ class MatchType(DatamijnObject, metaclass=MatchTypeMetaclass):
             if value == Terminator:
                 self._match[key] = value
             else:
-                self._match[key] = value.make(bases=[match_result]).resolve(ctx, path + [key])
+                self._match[key] = value.resolve(ctx, path + [key])
+                # Whose idea was this atrocity again?  Seriously don't.
+                #self._match[key] = value.make(bases=[match_result]).resolve(ctx, path + [key])
             if value._yields:
                 self._yields = True
             
@@ -1106,6 +1110,8 @@ class MatchType(DatamijnObject, metaclass=MatchTypeMetaclass):
         key_value = value
         if isinstance(value, Byte):
             key_value = ord(value)
+        elif isinstance(value, int):
+            key_value = int(key_value)
         
         if key_value in self._match:
             return self._match[key_value].parse_stream(stream, ctx, path + [f"[{value}]"], **kwargs)
@@ -1120,7 +1126,7 @@ class MatchType(DatamijnObject, metaclass=MatchTypeMetaclass):
                     ctx_extra = {str(self._default_key): value}
                 # XXX this makes sense e.g. for pokered.type_effectiveness
                 obj = self._match[self._default_key].parse_stream(stream, ctx + [ctx_extra], path + [f"[_]"], **kwargs)
-                if obj != None:
+                if obj != None and obj._size != None and value._size != None:
                     obj._address = value._address
                     obj._size += value._size
                 return obj
