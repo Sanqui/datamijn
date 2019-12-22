@@ -4,10 +4,10 @@ import array as pyarray
 
 import png
 
-from datamijn.dmtypes import Primitive, Array, ListArray
+from datamijn.dmtypes import DatamijnObject, Array, ListArray
 from datamijn.utils import bits
 
-class Tile(Primitive):
+class Tile(DatamijnObject):
     width = 8
     height = 8
     depth = 2
@@ -197,7 +197,7 @@ class Palette(ListArray):
     def __repr__(self):
         return f"<{type(self).__name__}>"
 
-class Color(Primitive):
+class Color(DatamijnObject):
     @property
     def hex(self):
         raise NotImplementedError()

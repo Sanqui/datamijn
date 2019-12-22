@@ -84,7 +84,10 @@ class DatamijnBrowserTreeWidget(urwid.TreeWidget):
                 valuetext += [(body_color, repr(value))]
         
         if showtype:
-            valuetext += [('blank', ' '), ('type', "<"+type(value).__name__+">")]
+            typetext = type(value).__name__
+            if len(typetext) > 28:
+                typetext = typetext[:28]+"…"
+            valuetext += [('blank', ' '), ('type', "<"+typetext+">")]
         
         if node._key is not None:
             text = urwid.Text([(name_color, str(node._key)+": ")] + valuetext)
@@ -306,7 +309,7 @@ class DatamijnBrowser():
             if isinstance(obj, Array) and not isinstance(obj, String):
                 for i, child in enumerate(obj):
                     get_childs_from(child, i)
-            elif isinstance(obj, Container):
+            elif isinstance(obj, Struct):
                 for name, child in obj.items():
                     get_childs_from(child, name)
             else:

@@ -71,7 +71,7 @@ expr7: expr8                    -> expr
     | expr6 "." NAME            -> expr_attr
 
 expr8: NAME                     -> expr_name
-    | scruct                    -> expr_struct
+    | struct                    -> expr_struct
     | NUM                       -> expr_int
     | string                    -> expr_string
     | "(" expr1 ")"             -> expr_bracket
