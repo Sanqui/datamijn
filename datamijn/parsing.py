@@ -105,7 +105,7 @@ class TreeToStruct(Transformer):
                 print(tree)
                 raise RuntimeError(f"Internal error: unknown struct field {field}")
         
-        return Struct.new("Struct", _fields=fields, _return=return_)
+        return Struct.make(None, _fields=fields, _return=return_)
     
     #
     # expr
@@ -116,7 +116,7 @@ class TreeToStruct(Transformer):
     
     def expr_pipe(self, tree):
         left_type, right_type = tree
-        return Pipe.new(f"{left_type.__name__}|{right_type.__name__}",
+        return Pipe.make(None,
             _left_type=left_type, _right_type=right_type)
     
     def expr_inherit(self, tree):
@@ -131,17 +131,17 @@ class TreeToStruct(Transformer):
             raise SyntaxError(f"""Can only inherit from primitive types
 Attempted to inherit {left_type.__name__} from {name}""")
         
-        return Inheritance.new(f"{left_type.__name__} {right_type.__name__}",
+        return Inheritance.make(None,
             _left_type=left_type, _right_type=right_type)
     
     def expr_attr(self, tree):
         left, name = tree
-        return ExprAttr.new(f"({left.__name__}).{name}",
+        return ExprAttr.make(None,
             _left=left, _name=name)
     
     def expr_index(self, tree):
         left, index = tree
-        return ExprIndex.new(f"({left.__name__})[{index.__name__}]",
+        return ExprIndex.make(f"({left.__name__})[{index.__name__}]",
             _left=left, _index=index)
     
     def expr_infix(self, tree):
@@ -155,7 +155,7 @@ Attempted to inherit {left_type.__name__} from {name}""")
             "!=": operator.ne,
         }
         left, sign, right = tree
-        return ExprOp.new(f"({left.__name__}{sign}{right.__name__})",
+        return ExprOp.make(f"({left.__name__}{sign}{right.__name__})",
             _left=left, _right=right, _op=OPERATIONS[sign])
     
     def expr_bracket(self, tree):
@@ -163,38 +163,38 @@ Attempted to inherit {left_type.__name__} from {name}""")
     
     def expr_foreign_key(self, tree):
         type_, field_name = tree
-        return ForeignKey.new(f"{type_.__name__}ForeignKey",
+        return ForeignKey.make(f"{type_.__name__}ForeignKey",
             _type=type_, _field_name=field_name)
     
     def expr_yield(self, tree):
         type = tree[0]
-        return Yield.new("Yield", _type=type)
+        return Yield.make("Yield", _type=type)
     
     def expr_match(self, tree):
         type = tree[0]
         match = tree[1]
-        return MatchType.new(f"{type.__name__}Match", _type=type, _match=match)
+        return MatchType.make(f"{type.__name__}Match", _type=type, _match=match)
         
     def expr_char_match(self, tree):
         type = tree[0]
         match = tree[1]
-        return CharMatchType.new(f"{type.__name__}Match", _type=type, _match=match)
+        return CharMatchType.make(f"{type.__name__}Match", _type=type, _match=match)
     
     def expr_name(self, f):
         name = str(f[0])
         if name in primitive_types:
             return primitive_types[name]
         else:
-            return ExprName.new(f"{name}", _name=name)
+            return ExprName.make(f"{name}", _name=name)
     
     def expr_int(self, f):
         type_ = ExprHex if f[0].startswith("0x") else ExprInt
         num = eval(f[0])
-        return type_.new(_int=num)
+        return type_.make(_int=num)
     
     def expr_string(self, token):
         string = str(token[0])
-        return ExprString.new(string, _string=string)
+        return ExprString.make(string, _string=string)
     
     def expr_struct(self, f):
         return f[0]
@@ -205,17 +205,17 @@ Attempted to inherit {left_type.__name__} from {name}""")
             count = count_tree.children[0]
         else:
             count = None
-        return Array.new(f"[]{type_.__name__}", _parsetype=type_, _length=count)
+        return Array.make(f"[]{type_.__name__}", _parsetype=type_, _length=count)
     
     def expr_ptr(self, f):
         addr = f[0]
         type_ = f[1]
-        return Pointer.new(f"@({addr.__name__})({type_.__name__})", _addr=addr, _type=type_)
+        return Pointer.make(f"@({addr.__name__})({type_.__name__})", _addr=addr, _type=type_)
     
     def expr_pipeptr(self, f):
         addr = f[0]
         type_ = f[1]
-        return PipePointer.new(f"|@({addr.__name__})({type_.__name__})", _addr=addr, _type=type_)
+        return PipePointer.make(f"|@({addr.__name__})({type_.__name__})", _addr=addr, _type=type_)
     
     def expr_typedef(self, f):
         name = f[0].value
@@ -247,14 +247,14 @@ Attempted to inherit {left_type.__name__} from {name}""")
     def field_return(self, f):
         expr = f[0]
         
-        return Return.new("Return", _expr=expr)
+        return Return.make("Return", _expr=expr)
     
     def field_if(self, f):
         expr = f[0]
         true_struct = f[1]
         false_struct = f[2] if len(f) == 3 else []
         
-        return (None, If.new("If", _expr=expr, _true_struct=true_struct, _false_struct=false_struct))
+        return (None, If.make("If", _expr=expr, _true_struct=true_struct, _false_struct=false_struct))
     
     def field_assert(self, f):
         cond = f[0][8:]
@@ -274,7 +274,7 @@ Attempted to inherit {left_type.__name__} from {name}""")
     def field_yield(self, f):
         type = f[0]
         
-        return (None, Yield.new("Yield", _type=type))
+        return (None, Yield.make("Yield", _type=type))
     
     def field_instance(self, f):
         name = f[0]
@@ -302,9 +302,9 @@ Attempted to inherit {left_type.__name__} from {name}""")
         fields = []
         
         for symbol, addr in symbols.items():
-            fields.append((symbol, ExprHex.new(None, _int=addr)))
+            fields.append((symbol, ExprHex.make(None, _int=addr)))
         
-        return ("sym", LenientStruct.new(f"SymfileStruct({token[0]})", _fields=fields, _return=[]))
+        return ("sym", LenientStruct.make(f"SymfileStruct({token[0]})", _fields=fields, _return=[]))
         
 grammar = open(os.path.dirname(__file__)+"/grammar.g").read()
 

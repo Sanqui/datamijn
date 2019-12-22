@@ -59,13 +59,24 @@ class DatamijnObject():
             raise NotImplementedError()
     
     @classmethod
-    def new(self, name=None, bases=[], **kwargs):
+    def rename(self, name=None):
         if name == None:
             if hasattr(self, '_namestring'):
-                name = self._namestring.format(**kwargs)
+                try:
+                    self.__name__ = self._namestring.format(self=self)
+                except (KeyError, AttributeError) as ex:
+                    raise type(ex)(f"Invalid _namestring for class {self.__name__}: {type(ex).__name__}: {ex}")
             else:
-                name = self.__name__
-        return type(name, (self, *bases), kwargs)
+                pass
+        else:
+            self.__name__ = name
+    
+    @classmethod
+    def make(self, name=None, bases=[], **kwargs):
+        newtype = type(name or self.__name__, (self, *bases), kwargs)
+        if name is None:
+            newtype.rename()
+        return newtype
         
     @classmethod
     def _parse_stream(self, stream, ctx, path, index=None, **kwargs):
@@ -315,18 +326,18 @@ class Array(DatamijnObject):
             #    self._final_length = True
         self._parsetype = self._parsetype.resolve(ctx, path)
         
-        match = None
+        new_array_type = None
         for elem_types, new_class in self.ARRAY_CLASSES.items():
-            match = None
+            new_array_type = None
             cur_type = self
             for elem_type in elem_types:
                 if hasattr(cur_type.infer_type(), "_parsetype") \
                   and issubclass(cur_type.infer_type()._parsetype.infer_type(), elem_type):
                     cur_type = cur_type._parsetype
-                    match = new_class
+                    new_array_type = new_class
                 else:
-                    match = None
-            if match:
+                    new_array_type = None
+            if new_array_type:
                 break
         
         length_name = ""
@@ -335,17 +346,17 @@ class Array(DatamijnObject):
         elif self._length:
             length_name = self._length.__name__
         
-        if match:
-            tail_name = match.__name__
+        if new_array_type:
+            tail_name = new_array_type.__name__
         else:
-            match = ListArray # !
+            new_array_type = ListArray # !
             tail_name = ""
         
         self._child_type = self._parsetype.infer_type()
         
         name = f"[{length_name}]{self._child_type.__name__}{tail_name}"
         
-        new = match.new(name, _parsetype=self._parsetype, _child_type=self._child_type, _length=self._length, _final_length=self._final_length)
+        new = new_array_type.make(name, _parsetype=self._parsetype, _child_type=self._child_type, _length=self._length, _final_length=self._final_length)
         new._yields = self._parsetype._yields
         return new
         
@@ -511,7 +522,7 @@ class Struct(dict, DatamijnObject):
                 name = field.__name__
                 if name[0] not in UPPERCASE + "!":
                     raise ResolveError(path, f"{name}: Type names must start with an uppercase letter.")
-                self._types[name] = NestedExprName.new(name, _name=name) # stub the type
+                self._types[name] = NestedExprName.make(name, _name=name) # stub the type
                 resolved = type_.resolve(ctx, path + [name])
                 if resolved._embed:
                     self._types.update(resolved._types)
@@ -704,6 +715,7 @@ class LenientStruct(Struct):
 
 
 class ExprName(DatamijnObject):
+    _namestring = "{self._name}"
     #_name
     
     @classmethod
@@ -737,8 +749,9 @@ class ExprName(DatamijnObject):
                     error_text += f"\nDid you mean {self._name.upper()}?"
                 raise ResolveError(path, error_text)
             
-            newtype = ExprName.new(f"{self._name} <{final_type.__name__}>", [final_type], _name=self._name)
-            newtype._final_type = final_type.infer_type()
+            final_type_inferred = final_type.infer_type()
+            
+            newtype = ExprName.make(None, [final_type], _name=self._name, _final_type=final_type_inferred)
             
             return newtype
 
@@ -762,6 +775,7 @@ class NestedExprName(ExprName):
 
 class ExprInt(DatamijnInt):
     _root_name = "ExprInt"
+    _namestring = "{self._int}"
     #_final = True
     _final_type = DatamijnInt
     #_int
@@ -835,6 +849,7 @@ class ExprOp(DatamijnObject):
         return self._op(left, right)
 
 class ExprAttr(DatamijnObject):
+    _namestring = "{self._left.__name__}.{self._name}"
     #_left
     #_name
     @classmethod
@@ -915,7 +930,7 @@ class RightSize(DatamijnObject):
                 return x['_right_size']
 
 class Pointer(DatamijnObject):
-    _namestring = "@({_addr.__name__})({_type.__name__})"
+    _namestring = "@{self._addr.__name__} {self._type.__name__}"
     #_type
     #_addr
     
@@ -926,7 +941,7 @@ class Pointer(DatamijnObject):
         if not issubclass(self._addr.infer_type(), int):
             raise ResolveError(path, f"Pointer address must resolve to int.\n{self._addr.__name__} resolves to {full_type_name(self._addr.infer_type())}.\nHINT: This could be a syntax ambiguity.  If you intend to index or attribute in your address expression, make sure to put it in parenthesis!")
         
-        newtype = self.new(None, [self._type.infer_type()], _addr=self._addr, _type=self._type)
+        newtype = self.make(None, [self._type.infer_type()], _addr=self._addr, _type=self._type)
         
         #newtype._final_type = self._type.infer_type()
         newtype._final_type = newtype
@@ -962,7 +977,7 @@ class Pointer(DatamijnObject):
         return obj
 
 class PipePointer(Pointer):
-    _namestring = "|@({_addr.__name__})({_type.__name__})"
+    _namestring = "|@({self._addr.__name__})({self._type.__name__})"
     
     @classmethod
     def parse_stream(self, stream, ctx, path, pipebuffer=None, **kwargs):
@@ -1009,6 +1024,9 @@ class ConcatableMatchResult(DatamijnObject):
 # TODO explain why this is a thing ('cause I forgot)
 class MatchTypeMetaclass(type):
     def __getattr__(self, name):
+        if name == '_match_types':
+            raise AttributeError()
+        
         if name in self._match_types:
             return self._match_types[name]
         else:
@@ -1039,7 +1057,7 @@ class MatchType(DatamijnObject, metaclass=MatchTypeMetaclass):
         else:
             result_type = ConcatableMatchResult
             
-        match_result = result_type.new(f"{self.__name__}Result", bases=result_bases)
+        match_result = result_type.make(f"{self.__name__}Result", bases=result_bases)
         
         for key, value in self._match.items():
             if isinstance(key, str):
@@ -1047,7 +1065,7 @@ class MatchType(DatamijnObject, metaclass=MatchTypeMetaclass):
             if value == Terminator:
                 self._match[key] = value
             else:
-                self._match[key] = value.new(bases=[match_result]).resolve(ctx, path + [key])
+                self._match[key] = value.make(bases=[match_result]).resolve(ctx, path + [key])
             if value._yields:
                 self._yields = True
             
@@ -1102,8 +1120,9 @@ class MatchType(DatamijnObject, metaclass=MatchTypeMetaclass):
                     ctx_extra = {str(self._default_key): value}
                 # XXX this makes sense e.g. for pokered.type_effectiveness
                 obj = self._match[self._default_key].parse_stream(stream, ctx + [ctx_extra], path + [f"[_]"], **kwargs)
-                obj._address = value._address
-                obj._size += value._size
+                if obj != None:
+                    obj._address = value._address
+                    obj._size += value._size
                 return obj
             else:
                 # XXX improve this error
@@ -1173,6 +1192,7 @@ class PipeStream(IOWithBits):
         return (f"<{'.'.join(str(x) for x in self._path)} PipeStream>")
 
 class Pipe(DatamijnObject):
+    _namestring = "{self._left_type.__name__}|{self._right_type.__name__}"
     # _left_type
     # _right_type
     @classmethod
@@ -1184,7 +1204,7 @@ class Pipe(DatamijnObject):
           and hasattr(self._left_type.infer_type(), "__or__"):
           #and not (issubclass(self._right_type, PipedDatamijnObject) \
           #  and not issubclass(self._right_type, Pipe)):
-            expr = ExprOp.new(f"({self._left_type.__name__}|{self._right_type.__name__})",
+            expr = ExprOp.make(f"({self._left_type.__name__}|{self._right_type.__name__})",
                 _left=self._left_type, _right=self._right_type, _op=operator.or_)
             return expr.resolve(ctx, path)
         
@@ -1218,6 +1238,7 @@ class Pipe(DatamijnObject):
             return result
 
 class Inheritance(DatamijnObject):
+    _namestring = "{self._left_type.__name__} {self._right_type.__name__}"
     # _left_type
     # _right_type
     @classmethod
@@ -1226,7 +1247,7 @@ class Inheritance(DatamijnObject):
             raise ResolveError(path, f"""Can only apply inheritance to Structs
 Attempted to inherit {self._left_type.__name__} from {self._right_type.__name__}""")
         
-        newtype = self._left_type.new(f"{self._left_type.__name__} {self._right_type.__name__}", bases=[self._right_type]).resolve(ctx, path)
+        newtype = self._left_type.make(None, bases=[self._right_type]).resolve(ctx, path)
         
         for field in self._right_type._inherited_fields:
             if field not in newtype._contents:
