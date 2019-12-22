@@ -821,18 +821,18 @@ class ExprOp(DatamijnObject):
         # This is a basic sanity check, but it's a bit crazy yet doesn't cover
         # all cases.
         
+        def get_all_bases(type):
+            bases = set(type.__bases__)
+            for base in type.__bases__:
+                bases |= get_all_bases(base)
+            
+            return bases
+        
+        common_bases = get_all_bases(self._left.infer_type()) & get_all_bases(self._right.infer_type())
+        common_bases -= set([object, DatamijnObject])
+        
         if self._left.infer_type() != self._right.infer_type() \
-            and not issubclass(self._left.infer_type(), self._right.infer_type()) \
-            and not issubclass(self._right.infer_type(), self._left.infer_type()) \
-            and not (
-              issubclass(self._left.infer_type(), Array) \
-              and issubclass(self._right.infer_type(), Array) \
-              and (
-                self._left.infer_type()._child_type.infer_type() == self._right.infer_type()._child_type.infer_type() \
-                or self._left.infer_type()._child_type.infer_type().__name__ == self._right.infer_type()._child_type.infer_type().__name__
-              ) # XXX more type string comparison
-            ) \
-            and not self._left.infer_type().__bases__[0] in self._right.infer_type().__bases__ \
+            and not common_bases \
             and not transformed_type:
                 raise ResolveError(path, f"Both types in an `{self._op.__name__}` expression have to match or be compatible.\n{full_type_name(self._left.infer_type())} != {full_type_name(self._right.infer_type())}")
         
