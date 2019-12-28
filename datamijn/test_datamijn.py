@@ -992,6 +992,19 @@ def test_type_name_error():
     with pytest.raises(datamijn.ResolveError):
         result = datamijn.parse(dm, b"")
 
+def test_rename_list():
+    dm = """
+:Test [5] {
+    foo     5
+}
+
+test Test
+"""
+    
+    result = datamijn.parse(dm, b("00"))
+    assert type(result.test).__name__ == "Test"
+
+
 def test_read_error():
     dm = """
 test0 U8

@@ -1,7 +1,7 @@
 from setuptools import setup
 
 setup(name='datamijn',
-      version='0.4.1',
+      version='0.4.3',
       description='Awesome declarative binary data parser',
       url='',
       author='Sanqui',

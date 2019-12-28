@@ -759,10 +759,10 @@ class ExprName(DatamijnObject):
             for context in reversed(ctx):
                 if type(context) == dict:
                     if self._name in context:
-                        return context[self._name].resolve(ctx, path)
+                        return context[self._name]
                 else:
                     if self._name in context._types:
-                        return context._types[self._name].resolve(ctx, path)
+                        return context._types[self._name]
             
             raise ResolveError(path, f"Cannot resolve type {self._name}")
         else:
