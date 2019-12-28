@@ -221,12 +221,12 @@ Attempted to inherit {left_type.__name__} from {name}""")
         name = f[0].value
         type_ = f[1]
         
-        return type(name, (type_,), {})
+        return Subclass.make(_name=name, _type=type_)
     
     def expr_typedeftoken(self, f):
         name = f[0].value
         
-        return type(name, (Token,), {})
+        return Subclass.make(_name=name, _type=Token)
     
     #
     # field

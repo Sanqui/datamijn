@@ -417,7 +417,7 @@ class Array(DatamijnObject):
                 if contents[-1] == 0:
                     break
             elif isinstance(contents[-1], Terminator):
-                if type(contents[-1]) == Terminator:
+                if type(contents[-1]) is Terminator:
                     contents.pop()
                 break
             #else:
@@ -737,6 +737,17 @@ class LenientStruct(Struct):
     # which is something else.
     _lenient = True
 
+class Subclass(DatamijnObject):
+    _namestring = "{self._name}"
+    #_name
+    #_type
+    
+    @classmethod
+    def resolve(self, ctx, path):
+        newtype = self._type.make()
+        newtype = newtype.resolve(ctx, path)
+        newtype.rename(self._name)
+        return newtype
 
 class ExprName(DatamijnObject):
     _namestring = "{self._name}"
@@ -1304,6 +1315,9 @@ class ForeignKey(DatamijnObject):
         if not isinstance(self._field_name, tuple):
             self._field_name = (self._field_name,)
         
+        if self._field_name[0][0] in UPPERCASE:
+            raise ResolveError(path, "Field name must begin with lowercase letter")
+        
         # TODO flattern field name
         
         self.__name__ = f"{self._type.__name__} -> {self._field_name[-1]}"
@@ -1337,7 +1351,7 @@ class ForeignKey(DatamijnObject):
         return obj
     
     def __getattr__(self, attr):
-        if attr in ("_address", "_error"):
+        if attr in ("_address", "_pointer", "_error"):
             try:
                 return getattr(self._object, attr)
             except ForeignKeyError:
