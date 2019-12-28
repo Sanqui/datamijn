@@ -9,10 +9,11 @@ DATAMIJN_OUTPUTS = ["pretty_repr", "repl", "ipython", "browser"]
 @click.argument('binary-filename', type=click.Path(exists=True))
 @click.argument('output', type=click.Choice(DATAMIJN_OUTPUTS), default="pretty_repr")
 @click.option('-p', '--show-private', is_flag=True)
-def cli(struct_filename, binary_filename, output, show_private):
+@click.option('-l', '--lenient', is_flag=True)
+def cli(struct_filename, binary_filename, output, show_private, lenient):
     struct_file = open(struct_filename, 'r')
     binary_file = open(binary_filename, 'rb')
-    result = parse(struct_file, binary_file)
+    result = parse(struct_file, binary_file, lenient=lenient)
 
     if output == "pretty_repr":
         print(result._pretty_repr())

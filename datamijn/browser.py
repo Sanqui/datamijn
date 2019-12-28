@@ -34,6 +34,10 @@ class DatamijnBrowserTreeWidget(urwid.TreeWidget):
         broken_value = False
         
         valuetext = []
+        
+        if hasattr(value, '_error') and value._error and not isinstance(value, Exception):
+            valuetext += [('error', ' ')]
+        
         if isinstance(node, DatamijnBrowserParentNode):
             if isinstance(value, ForeignKey):
                 try:
@@ -76,7 +80,7 @@ class DatamijnBrowserTreeWidget(urwid.TreeWidget):
                 showtype = False
             elif isinstance(value, Exception):
                 body_color = 'error'
-                valuetext += [(body_color, f"{type(value).__name__}: {value}")]
+                valuetext += [(body_color, f"{type(value).__name__}")]
             else:
                 if isinstance(value, str):
                     body_color = 'string'
@@ -272,9 +276,10 @@ class DatamijnBrowser():
         obj_repr = repr(obj)
         
         if not broken_obj:
+            type_color = 'error' if isinstance(obj, Exception) else 'body'
             text = [
                 ('name', "Path:    "), ('body', obj_path + "\n"),
-                ('name', "Type:    "), ('body', ""+full_type_name(type(obj))+"\n"),
+                ('name', "Type:    "), (type_color, ""+full_type_name(type(obj))+"\n"),
                 ('name', "Address: "), ('body', obj_address+"\n"),
                 ('name', "Size:    "), ('body', obj_size+"\n"),
             ]
@@ -289,11 +294,20 @@ class DatamijnBrowser():
                 ('error', "Broken object\n"),
                 ('body', obj_error+"\n\n\n\n")
             ]
-        text += [
-            ('name', "Value:   "), ('body', (obj_repr[:40]+'...' if len(obj_repr)>43 else obj_repr) + "\n\n"),
-        ]
         
-        if not broken_obj and self.file and hasattr(obj, "_address") and obj._address != None:
+        if isinstance(obj, Exception):
+            text += ('error', type(obj).__name__), ('body', f": {obj}"),
+        else:
+            text += [
+                ('name', "Value:   "), ('body', (obj_repr[:40]+'...' if len(obj_repr)>43 else obj_repr) + "\n"),
+            ]
+        
+            if hasattr(obj, '_error') and obj._error:
+                text += [('error', 'Substructure has error\n')]
+            else:
+                text += ["\n"]
+        
+        if not broken_obj and self.file and hasattr(obj, "_address") and obj._address != None and not isinstance(obj, Exception):
             childs_at = {}
         
             def get_childs_from(obj, name):

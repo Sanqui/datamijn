@@ -1,6 +1,6 @@
 import operator
 from io import BytesIO, BufferedIOBase
-from datamijn.utils import UPPERCASE, full_type_name, ResolveError, ParseError, ForeignKeyError
+from datamijn.utils import UPPERCASE, full_type_name, ResolveError, ParseError, ForeignKeyError, ReadError
 
 class IOWithBits(BufferedIOBase):
     def __init__(self, *args, **kvargs):
@@ -31,10 +31,16 @@ class IOWithBits(BufferedIOBase):
         
         return num
     
-    def read(self, amount):
+    def read(self, amount, strict=True):
+        pos = self.tell()
         if self._byte != None:
-            raise RuntimeError("Attempting to read bytes while not byte-aligned")
-        return super().read(amount)
+            raise ReadError(f"Attempting to read bytes while not byte-aligned.\nRead of size {amount} at position {hex(pos)}.")
+        result = super().read(amount)
+        if strict and len(result) < amount:
+            raise ReadError(f"Data access out of bounds.\nRead of size {amount} at position {hex(pos)}.")
+        return result
+
+BytesIOWithBits = type(f"BytesIOWithBits", (IOWithBits, BytesIO), {})
 
 class DatamijnObject():
     _size = None
@@ -83,7 +89,7 @@ class DatamijnObject():
         raise NotImplementedError()
     
     @classmethod
-    def parse_stream(self, stream, ctx, path, index=None, **kwargs):
+    def parse_stream(self, stream, ctx, path, index=None, lenient=False, **kwargs):
         rich = ctx[0]._rich
         if rich:
             address = stream.tell()
@@ -98,14 +104,19 @@ class DatamijnObject():
             value = self._parse_stream(stream, ctx, path, index=index, **kwargs)
             assert value != None
         except Exception as ex:
-            raise Exception(f'{type(ex).__name__}: {ex}\nPath: {".".join(str(x) for x in path)}')
+            if lenient:
+                obj = ex
+            else:
+                raise type(ex)(f'{ex}\nPath: {".".join(str(x) for x in path)}')
+        else:
+            obj = self.__new__(self, value)
+            obj.__init__(value)
         
-        obj = self.__new__(self, value)
-        obj.__init__(value)
         if rich:
             obj._address = address
             obj._size = length
             obj._path = path
+            obj._error = isinstance(obj, Exception)
             
         return obj
     
@@ -133,7 +144,6 @@ class DatamijnObject():
     
     def _save(self, ctx, path):
         raise NotImplementedError()
-        return f"{self.__class__.__name__}"
     
 #class PipedDatamijnObject(DatamijnObject):
 #    _pipeable = True
@@ -259,7 +269,7 @@ class HexDatamijnObject(DatamijnInt):
         else:
             return f"{self.__class__.__name__}({hex(int(self))})"
 
-class DatamijnBits(DatamijnInt, int):
+class DatamijnBits(DatamijnInt):
     _size = None
     _num_bits = None
     @classmethod
@@ -267,7 +277,7 @@ class DatamijnBits(DatamijnInt, int):
         value = stream.read_bits(self._num_bits)
         return value
 
-class B1(DatamijnInt, int):
+class B1(DatamijnInt):
     _root_name = "B1"
     _size = None
     _num_bits = 1
@@ -279,7 +289,7 @@ class B1(DatamijnInt, int):
 def make_bit_type(num_bits):
     return type(f"B{num_bits}", (DatamijnBits,), {"_num_bits": num_bits, "_root_name": f"B{num_bits}"})
 
-class U8(DatamijnInt, int):
+class U8(DatamijnInt):
     _root_name = "U8"
     _size = 1
     @classmethod
@@ -288,7 +298,7 @@ class U8(DatamijnInt, int):
         value = ord(data)
         return value
 
-class U16(DatamijnInt, int):
+class U16(DatamijnInt):
     _root_name = "U16"
     _size = 2
     @classmethod
@@ -370,12 +380,12 @@ class Array(DatamijnObject):
             return None
     
     @classmethod
-    def parse_stream(self, stream, ctx, path, index=None, **kwargs):
+    def parse_stream(self, stream, ctx, path, index=None, strict_read=True, **kwargs):
         contents = []
         if self._final_length:
             length = self._length
         elif self._length != None:
-            length = self._length.parse_stream(stream, ctx, path, **kwargs)
+            length = self._length.parse_stream(stream, ctx, path, strict_read=strict_read, **kwargs)
         else:
             length = None
         
@@ -383,11 +393,15 @@ class Array(DatamijnObject):
         
         if self._length != None and self._parsetype == Byte:
             # Speed optimization for byte arrays!
-            return stream.read(length)
+            print(type(stream))
+            return stream.read(length, strict=strict_read)
         
+        error = False
         i = 0
         while True:
-            item = self._parsetype.parse_stream(stream, ctx, path + [i], index=i, **kwargs)
+            item = self._parsetype.parse_stream(stream, ctx, path + [i], index=i, strict_read=strict_read, **kwargs)
+            if hasattr(item, '_error') and item._error:
+                error = True
             if self._concat and len(contents) \
               and type(contents[-1]) == type(item) \
               and isinstance(item, str):
@@ -418,6 +432,7 @@ class Array(DatamijnObject):
             obj._address = start_address
             obj._size = size
             obj._path = path
+            obj._error = error
             return obj
     
     @classmethod
@@ -483,6 +498,8 @@ class String(ListArray):
             if isinstance(item, str):
                 string += item
             elif isinstance(item, Terminator):
+                pass
+            elif isinstance(item, Exception):
                 pass
             else:
                 string += f"<{repr(item)}>"
@@ -574,6 +591,7 @@ class Struct(dict, DatamijnObject):
         if rich:
             start_address = stream.tell()
         
+        error = False
         size = 0
         size_extra = 0
         obj = self()
@@ -584,6 +602,8 @@ class Struct(dict, DatamijnObject):
             passed_path.append(name)
             address = stream.tell()
             result = type_.parse_stream(stream, ctx, passed_path, index=index, **kwargs)
+            if hasattr(result, '_error') and result._error:
+                error = True
             if rich:
                 result_size = stream.tell() - address
                 size += result_size
@@ -605,6 +625,7 @@ class Struct(dict, DatamijnObject):
                 obj._size = size
                 obj._size_extra = size_extra
                 obj._path = path
+                obj._error = error
             return obj
     
     def __setitem__(self, key, value):
@@ -712,6 +733,8 @@ class LenientStruct(Struct):
         Doesn't care about field names.  Typically they must start
         with a lowercase letter.
     """
+    # TODO rename this.  Can and will be confused with lenient parsing mode
+    # which is something else.
     _lenient = True
 
 
@@ -831,6 +854,7 @@ class ExprOp(DatamijnObject):
         common_bases = get_all_bases(self._left.infer_type()) & get_all_bases(self._right.infer_type())
         common_bases -= set([object, DatamijnObject])
         
+        # TODO check that arrays have matching subtypes
         if self._left.infer_type() != self._right.infer_type() \
             and not common_bases \
             and not transformed_type:
@@ -1144,7 +1168,7 @@ class PipeStream(IOWithBits):
         self._ctx = ctx
         self._type = type_
         
-        self._buffer = BytesIO(b"")
+        self._buffer = BytesIOWithBits(b"")
         
         self._byte = None
         self._bit_number = None
@@ -1158,10 +1182,11 @@ class PipeStream(IOWithBits):
             else:
                 raise TypeError(f"Attempting to pipe {full_type_name(type_.infer_type())}")
     
-    def read(self, num):
+    def read(self, num, strict=True):
+        assert strict == True
         self._buffer.seek(0, 2) # SEEK_END
         while self._free_bytes < num:
-            result = self._type.parse_stream(self._stream, self._ctx, self._path + ["<PipeStream>"], pipebuffer=self._buffer, pipestream=self) # XXX
+            result = self._type.parse_stream(self._stream, self._ctx, self._path + ["<PipeStream>"], pipebuffer=self._buffer, pipestream=self, strict_read=False) # XXX
             if result != None and not (isinstance(result, Struct) and result._is_empty()):
                 if not isinstance(result, bytes):
                     print(repr(result))
@@ -1312,7 +1337,7 @@ class ForeignKey(DatamijnObject):
         return obj
     
     def __getattr__(self, attr):
-        if attr == "_address":
+        if attr in ("_address", "_error"):
             try:
                 return getattr(self._object, attr)
             except ForeignKeyError:

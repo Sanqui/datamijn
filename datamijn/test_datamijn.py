@@ -992,6 +992,31 @@ def test_type_name_error():
     with pytest.raises(datamijn.ResolveError):
         result = datamijn.parse(dm, b"")
 
+def test_read_error():
+    dm = """
+test0 U8
+test1 U8
+test2 U8
+test3 U8
+"""
+    
+    with pytest.raises(datamijn.utils.ReadError):
+        result = datamijn.parse(dm, b("0001"))
+
+def test_read_error_lenient():
+    dm = """
+test0 U8
+test1 U8
+test2 U8
+test3 U8
+"""
+    
+    result = datamijn.parse(dm, b("0001"), lenient=True)
+    assert result.test0 == 0
+    assert result.test1 == 1
+    assert isinstance(result.test2, datamijn.utils.ReadError)
+    assert isinstance(result.test3, datamijn.utils.ReadError)
+
 def test_resolve_parent_type():
     dm = """
 object1 {

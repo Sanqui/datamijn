@@ -330,7 +330,7 @@ def parse_definition(definition, name=None, embed=False, stdlib=None):
     
     return struct
 
-def parse(definition, data, output_dir=None):
+def parse(definition, data, output_dir=None, lenient=False):
     stdlib = parse_definition(open(os.path.dirname(__file__)+"/stdlib.dm").read(), embed=True)
     struct = parse_definition(definition, stdlib=stdlib)
     if output_dir:
@@ -350,7 +350,7 @@ def parse(definition, data, output_dir=None):
     
     data = type(f"{type_.__name__}WithBits", (IOWithBits, type_), {})(data)
     
-    result = start.parse_stream(data)
+    result = start.parse_stream(data, lenient=lenient)
 
     result._structs = struct
     return result

@@ -51,3 +51,5 @@ class DatamijnPathError(DatamijnError):
 class ResolveError(DatamijnPathError): pass
 
 class ParseError(DatamijnPathError): pass
+
+class ReadError(DatamijnError): pass
