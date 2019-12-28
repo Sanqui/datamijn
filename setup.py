@@ -1,7 +1,7 @@
 from setuptools import setup
 
 setup(name='datamijn',
-      version='0.4.0',
+      version='0.4.1',
       description='Awesome declarative binary data parser',
       url='',
       author='Sanqui',
@@ -13,7 +13,7 @@ setup(name='datamijn',
         'lark-parser',
         'construct',
         'pypng',
-        'oyaml'
+        'oyaml',
         'click',
         'urwid',
       ],
