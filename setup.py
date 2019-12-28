@@ -1,8 +1,8 @@
 from setuptools import setup
 
 setup(name='datamijn',
-      version='0.1',
-      description='Awesome declarative binary parser',
+      version='0.4.0',
+      description='Awesome declarative binary data parser',
       url='',
       author='Sanqui',
       author_email='me@sanqui.net',
