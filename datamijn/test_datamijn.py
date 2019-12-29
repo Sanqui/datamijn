@@ -416,6 +416,18 @@ test     [4] U8 match {
     assert result.test[1].value == 0xaa
     assert result.test[2] == 0
 
+def test_match_list_type():
+    db = """
+test     [] U8 match {
+    0 => Terminator
+    x => :Foobar {
+        baz U8
+    }
+}"""
+    result = datamijn.parse(db, b("010200"))
+    assert type(result.test).__name__ == "[]Foobar"
+    
+
 def test_bits():
     dm = """
 :SomeBits {

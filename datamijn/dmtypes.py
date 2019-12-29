@@ -1078,23 +1078,28 @@ class MatchType(DatamijnObject, metaclass=MatchTypeMetaclass):
         self._final_type = None
         
         ## Pass 1: collect all possible match types
-        #types = []
-        #for key, value in self._match.items():
-        #    inferred_type = value.resolve(ctx, path + [key]).infer_type()
-        #    if not issubclass(value, Terminator):
-        #        types.append(inferred_type)
-        #
-        #if len(types) == 1:
-        #    result_bases = [types[0]]
-        #else:
-        result_bases = []
+        types = []
+        for key, value in self._match.items():
+            if isinstance(key, str):
+                ctx.append({key: self._type})
+            inferred_type = value.resolve(ctx, path + [key])
+            if not issubclass(value, Terminator):
+                types.append(inferred_type)
+        
+        if len(types) == 1:
+            result_base = types[0]
+        else:
+            result_base = None
         
         if not self._concat_result:
             result_type = MatchResult
         else:
             result_type = ConcatableMatchResult
-            
-        match_result = result_type.make(f"{self.__name__}Result", bases=result_bases)
+        
+        if result_base:
+            match_result = result_type.make(result_base.__name__, bases=[result_base])
+        else:
+            match_result = result_type.make(f"{self.__name__}Result", bases=[])
         
         for key, value in self._match.items():
             if isinstance(key, str):
@@ -1363,7 +1368,7 @@ class ForeignKey(DatamijnObject):
         return self._object[item]
         
     def __repr__(self):
-        return f"{type(self).__name__}({repr(self._key)}, {repr(self._field_name)})"
+        return f"-> {self._field_name[-1]}({repr(self._key)}, {repr(self._field_name)})"
     
     def __str__(self):
         return str(self._object)
