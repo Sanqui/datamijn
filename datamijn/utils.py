@@ -53,3 +53,5 @@ class ResolveError(DatamijnPathError): pass
 class ParseError(DatamijnPathError): pass
 
 class ReadError(DatamijnError): pass
+
+class SaveNotImplementedError(DatamijnPathError): pass

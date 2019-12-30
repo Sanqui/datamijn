@@ -1,6 +1,6 @@
 import operator
 from io import BytesIO, BufferedIOBase
-from datamijn.utils import UPPERCASE, full_type_name, ResolveError, ParseError, ForeignKeyError, ReadError
+from datamijn.utils import UPPERCASE, full_type_name, ResolveError, ParseError, ForeignKeyError, ReadError, SaveNotImplementedError
 
 class IOWithBits(BufferedIOBase):
     def __init__(self, *args, **kvargs):
@@ -143,7 +143,8 @@ class DatamijnObject():
         return None
     
     def _save(self, ctx, path):
-        raise NotImplementedError()
+        pass
+        #raise SaveNotImplementedError(path, f"{type(self).__name__} doesn't implement !save")
     
 #class PipedDatamijnObject(DatamijnObject):
 #    _pipeable = True
@@ -996,10 +997,14 @@ class Pointer(DatamijnObject):
                 length = None
     
         address = self._addr.parse_stream(stream, ctx, path + ['(addr)'], **kwargs)
+        # XXX handle the bit stuff elsewhere?
         pos = stream.tell()
+        pos_bit = stream._bit_number
         stream.seek(address)
+        stream._bit_number = 0
         result = self._type.parse_stream(stream, ctx, path, **kwargs)
         stream.seek(pos)
+        stream._bit_number = pos_bit
         
         #obj = self.__new__(self, result)
         #obj.__init__(result)
