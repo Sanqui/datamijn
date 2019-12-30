@@ -787,7 +787,7 @@ class ExprName(DatamijnObject):
             
             final_type_inferred = final_type.infer_type()
             
-            newtype = ExprName.make(None, [final_type], _name=self._name, _final_type=final_type_inferred)
+            newtype = ExprName.make(None, [], _name=self._name, _final_type=final_type_inferred)
             
             return newtype
 
