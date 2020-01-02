@@ -24,3 +24,5 @@
 //    bytes    [RightSize]Byte
 //    = bytes
 //}
+
+//:GBAddr $pointer $bank      pointer % 0x4000 + bank * 0x4000

@@ -1057,6 +1057,54 @@ object1 {
     result = datamijn.parse(dm, b("aa"))
     assert result.object1.object2.x.foo == 0xaa
 
+def test_function():
+    dm = """
+:TimesFive(Num) Num * 5
+
+x   TimesFive(U8)
+y   TimesFive(U16)
+"""
+    result = datamijn.parse(dm, b("010200"))
+    assert result.x == 5
+    assert result.y == 10
+
+def test_function_multiple_parameters():
+    dm = """
+:Added(Type0, Type1, Type2) Type0 + Type1 + Type2
+
+x   Added(U8, U8, U8)
+"""
+    result = datamijn.parse(dm, b("010401"))
+    assert result.x == 6
+
+def test_function_lowercase_argument():
+    dm = """
+:TimesFive(num) num * 5
+
+x   TimesFive(U8)
+y   TimesFive(U16)
+"""
+    with pytest.raises(datamijn.ResolveError):
+        result = datamijn.parse(dm, b("010200"))
+
+def test_function_non_call():
+    dm = """
+:TimesFive(Num) Num * 5
+
+x   TimesFive
+"""
+    with pytest.raises(datamijn.ParseError):
+        result = datamijn.parse(dm, b("010200"))
+
+def test_function_wrong_parameters():
+    dm = """
+:Added(Num1, Num2) Num1 + Num2
+
+x   Added(U8)
+"""
+    with pytest.raises(datamijn.ResolveError):
+        result = datamijn.parse(dm, b("0104"))
+
 def test_import(tmpdir):
     tmpdir.join("color.dm").write("""
 :Color   U8 match {

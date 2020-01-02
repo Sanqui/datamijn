@@ -66,6 +66,8 @@ expr:   expr1                   -> expr
 
 expr6: expr7                    -> expr
     | expr6 "[" expr1 "]"       -> expr_index
+    | expr6 "(" (expr ",")* expr ")"   -> expr_call
+    | expr6 "(" ")"             -> expr_call
 
 expr7: expr8                    -> expr
     | expr6 "." NAME            -> expr_attr
@@ -76,8 +78,13 @@ expr8: NAME                     -> expr_name
     | string                    -> expr_string
     | "(" expr1 ")"             -> expr_bracket
 
-typedef: ":" NAME expr              -> expr_typedef
-    |    ":" NAME                   -> expr_typedeftoken
+arguments: "(" (NAME ",")* NAME ")"  -> expr_arguments
+
+typedef: 
+    | ":" NAME arguments expr     -> expr_funcdef
+    | ":" NAME "(" ")" expr       -> expr_funcdef
+    | ":" NAME expr               -> expr_typedef
+    | ":" NAME                    -> expr_typedeftoken
 
 field_name: NAME                    -> field_name
     | field_name "." field_name     -> field_name_dot

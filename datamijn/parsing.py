@@ -217,16 +217,36 @@ Attempted to inherit {left_type.__name__} from {name}""")
         type_ = f[1]
         return PipePointer.make(f"|@({addr.__name__})({type_.__name__})", _addr=addr, _type=type_)
     
+    def expr_arguments(self, f):
+        return [str(x) for x in f]
+    
+    def expr_funcdef(self, f):
+        name = f[0].value
+        if len(f) == 3:
+            arguments = f[1]
+            type_ = f[2]
+        else:
+            arguments = []
+            type_ = f[1]
+        
+        return Function.make(_name=name, _type=type_, _arguments=arguments)
+    
+    def expr_call(self, f):
+        expr = f[0]
+        arguments = f[1:]
+        
+        return Call.make(_func=expr, _arguments=arguments)
+    
     def expr_typedef(self, f):
         name = f[0].value
         type_ = f[1]
         
-        return Subclass.make(_name=name, _type=type_)
+        return Name.make(_name=name, _type=type_)
     
     def expr_typedeftoken(self, f):
         name = f[0].value
         
-        return Subclass.make(_name=name, _type=Token)
+        return Name.make(_name=name, _type=Token, _arguments=[])
     
     #
     # field

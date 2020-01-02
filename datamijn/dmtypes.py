@@ -50,6 +50,7 @@ class DatamijnObject():
     _yields = False
     _final_type = None
     _inherited_fields = []
+    _arguments = []
     
     #def __init__(self, value=None, data=None):
     #    self._value = value
@@ -738,17 +739,73 @@ class LenientStruct(Struct):
     # which is something else.
     _lenient = True
 
-class Subclass(DatamijnObject):
+class Name(DatamijnObject):
     _namestring = "{self._name}"
     #_name
     #_type
+    #_arguments
     
     @classmethod
     def resolve(self, ctx, path):
-        newtype = self._type.make()
+        newtype = self._type.make(_arguments=self._arguments)
         newtype = newtype.resolve(ctx, path)
         newtype.rename(self._name)
         return newtype
+
+class Function(DatamijnObject):
+    _namestring = "{self._name}"
+    #_name
+    #_type
+    #_arguments
+    
+    @classmethod
+    def resolve(self, ctx, path):
+        for argument in self._arguments:
+            if argument[0] not in UPPERCASE:
+                raise ResolveError(path, 'Function arguments must start with capital letter.')
+        return self
+    
+    @classmethod
+    def call(self, ctx, path, arguments):
+        if len(self._arguments) != len(arguments):
+            raise ResolveError(path, f"Function {self.__name__} takes {len(self._arguments)} argument{'s' if len(arguments)!=1 else ''}, however {len(arguments)} {'was' if len(arguments)==1 else 'were'} provided.")
+        ctx.append(dict(zip(self._arguments, arguments)))
+        newtype = self._type.make()
+        newtype = newtype.resolve(ctx, path + ["()"])
+        newtype.rename(self._name)
+        ctx.pop()
+        return newtype
+    
+    @classmethod
+    def parse_stream(self, stream, ctx, path, index=None, **kwargs):
+        raise ParseError(path, f"Attempted to parse using a function {self.__name__}.  Functions must be called.")
+        
+
+class Call(DatamijnObject):
+    _namestring = "{self._func.__name__}({self._arguments})"
+    #_func
+    #_arguments
+    
+    @classmethod
+    def resolve(self, ctx, path):
+        self._func = self._func.resolve(ctx, path)
+        arguments = []
+        for i, argument in enumerate(self._arguments):
+            arguments.append(argument.resolve(ctx, path+[f"(argument {i})"]))
+        
+        if not issubclass(self._func, Function):
+            raise ResolveError(path, f"Attempting to call non-function {full_type_name(self._func)}")
+        
+        self._resolved_arguments = arguments
+        self._expr = self._func.call(ctx, path, arguments)
+        return self
+    
+    @classmethod
+    def parse_stream(self, stream, ctx, path, index=None, **kwargs):
+        ctx.append(dict(zip(self._func._arguments, self._resolved_arguments)))
+        result = self._expr.parse_stream(stream, ctx, path + ["()"])
+        ctx.pop()
+        return result
 
 class ExprName(DatamijnObject):
     _namestring = "{self._name}"
@@ -769,6 +826,8 @@ class ExprName(DatamijnObject):
         else:
             # This is a reference!
             final_type = None
+            if self._name in self._arguments:
+                final_type = DatamijnObject # XXX
             for context in reversed(ctx):
                 if isinstance(context, dict):
                     if self._name in context:
@@ -776,6 +835,8 @@ class ExprName(DatamijnObject):
                 else:
                     if self._name in context._contents:
                         final_type = context._contents[self._name]
+                    elif self._name in context._arguments:
+                        final_type = DatamijnObject # XXX
                 if final_type:
                     break
             
