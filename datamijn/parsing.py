@@ -350,9 +350,12 @@ def parse_definition(definition, name=None, embed=False, stdlib=None):
     
     return struct
 
-def parse(definition, data, output_dir=None, lenient=False):
-    stdlib = parse_definition(open(os.path.dirname(__file__)+"/stdlib.dm").read(), embed=True)
-    struct = parse_definition(definition, stdlib=stdlib)
+def parse(definition, data, output_dir=None, lenient=False, use_stdlib=True):
+    if use_stdlib:
+        stdlib = parse_definition(open(os.path.dirname(__file__)+"/stdlib.dm").read(), embed=True)
+        struct = parse_definition(definition, stdlib=stdlib)
+    else:
+        struct = parse_definition(definition)
     if output_dir:
         output_dir = str(output_dir)
         if not output_dir.endswith("/"):

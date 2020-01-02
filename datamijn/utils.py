@@ -41,8 +41,9 @@ class ForeignKeyError(DatamijnError): pass
 
 class DatamijnPathError(DatamijnError):
     def __init__(self, path, message):
-        pathstr = '.'.join(str(x) for x in path)
-        if not pathstr:
+        if path:
+            pathstr = '.'.join(str(x) for x in path)
+        else:
             pathstr = "(root)"
         message = f"{message}\nPath: {pathstr}"
     

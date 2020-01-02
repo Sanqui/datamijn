@@ -10,9 +10,11 @@ from codecs import decode
 def b(string):
     return decode(string.replace(" ", ""), 'hex')
 
+def dmparse(dm, data, lenient=False, use_stdlib=False):
+    return datamijn.parse(dm, data, lenient=lenient, use_stdlib=use_stdlib)
 
 def test_stdlib():
-    result = datamijn.parse("", b"")
+    result = dmparse("", b"")
 
 @pytest.mark.parametrize("type,data,value", [
     ("U8",  b('01'), 1),
@@ -21,7 +23,7 @@ def test_stdlib():
 ])
 def test_basic_type(type, data, value):
     dm = f"value {type}"
-    result = datamijn.parse(dm, data)
+    result = dmparse(dm, data)
     assert result.value == value
     #assert result.value._data.data == data
     assert result.value._address == 0
@@ -33,7 +35,7 @@ position  {
     x   U8
     y   U8
 }"""
-    result = datamijn.parse(dm, b('1020'))
+    result = dmparse(dm, b('1020'))
     assert result.position.x == 0x10
     #assert result.position.x._data.data == b('10')
     assert result.position.x._address == 0x0
@@ -53,7 +55,7 @@ def test_type_definition():
 
 value   OneByte
 """
-    result = datamijn.parse(dm, b('01'))
+    result = dmparse(dm, b('01'))
     
     assert result.value == 1
 
@@ -63,7 +65,7 @@ value   OneByte
 value   onebyte
 """
     with pytest.raises(Exception):
-        result = datamijn.parse(dm, b('01'))
+        result = dmparse(dm, b('01'))
 
 def test_typedef_inline_name():
     dm = """
@@ -72,7 +74,7 @@ value   [4] :Coord {
     y   U8
 }
 """
-    result = datamijn.parse(dm, b('0001101120213031'))
+    result = dmparse(dm, b('0001101120213031'))
     
     value = result.value
     
@@ -87,7 +89,7 @@ def test_array():
     dm = """bytes   [6]U8"""
     
     nums = [1, 2, 3, 4, 5, 6]
-    result = datamijn.parse(dm, b('010203040506'))
+    result = dmparse(dm, b('010203040506'))
     
     assert result.bytes == nums
     
@@ -98,7 +100,7 @@ def test_array():
 def test_nested_array():
     dm = """bytes   [2][2][2]U8"""
     
-    result = datamijn.parse(dm, b('0102030405060708'))
+    result = dmparse(dm, b('0102030405060708'))
     assert result.bytes[0][0] == [1, 2]
     assert result.bytes[0][1] == [3, 4]
     assert result.bytes[1][0] == [5, 6]
@@ -112,7 +114,7 @@ bytes   [2]{
     b   U8
 }"""
     
-    result = datamijn.parse(dm, b('01020304'))
+    result = dmparse(dm, b('01020304'))
     assert result.bytes[0].a == 1
     assert result.bytes[0].b == 2
     assert result.bytes[1].a == 3
@@ -121,7 +123,7 @@ bytes   [2]{
 
 def test_array_hex():
     dm = "bytes [0xff]U8"
-    result = datamijn.parse(dm, b('01')*0xff)
+    result = dmparse(dm, b('01')*0xff)
     assert len(result.bytes) == 0xff
 
 def test_expr():
@@ -134,7 +136,7 @@ twenty      five * (3 + one)
 
 byte_plus_one U8 + 1
 """
-    result = datamijn.parse(dm, b('0e'))
+    result = dmparse(dm, b('0e'))
     assert result.five == 5
     assert result.six == 6
     assert result.ten == 10
@@ -150,7 +152,7 @@ x           five + 1
 x           x + 1
 """
     with pytest.raises(datamijn.ResolveError):
-        result = datamijn.parse(dm, b('00'))
+        result = dmparse(dm, b('00'))
         
     #assert result.x == 7
 
@@ -164,7 +166,7 @@ refoo {
     bar     foo.bar
 }
 """
-    result = datamijn.parse(dm, b(''))
+    result = dmparse(dm, b(''))
     
     assert result.foo.bar == 10
     assert result.refoo.bar == 10
@@ -179,7 +181,7 @@ refoo [10]{
     bar     foo[I].bar
 }
 """
-    result = datamijn.parse(dm, b(''))
+    result = dmparse(dm, b(''))
     
     assert result.foo[0].bar == 10
     assert result.foo[9].bar == 10
@@ -191,7 +193,7 @@ def test_array_dynamic():
 count   2
 bytes   [count]U8
 """
-    result = datamijn.parse(dm, b('aabb'))
+    result = dmparse(dm, b('aabb'))
     assert result.bytes == [0xaa, 0xbb]
 
 def test_struct_computed_value():
@@ -203,7 +205,7 @@ def test_struct_computed_value():
 
 array   [2]Test
 """
-    result = datamijn.parse(dm, b("0102"))
+    result = dmparse(dm, b("0102"))
     #assert result.test.x == 0xaa
     assert result.array[0] == 2
     assert result.array[1] == 4
@@ -221,7 +223,7 @@ nested {
     bytes2 [test]U8
 }
 """
-    result = datamijn.parse(dm, b("aabbccdd"))
+    result = dmparse(dm, b("aabbccdd"))
     assert result.test == 2
     assert result.bytes == [0xaa, 0xbb]
     assert result.nested.bytes2 == [0xcc, 0xdd]
@@ -230,7 +232,7 @@ nested {
 def test_pointer(test_hex):
     ptr = "0x0a" if test_hex else "10"
     db = f"pointed_byte @{ptr} U8"
-    result = datamijn.parse(db, b('00')*10 + b('01'))
+    result = dmparse(db, b('00')*10 + b('01'))
     assert result.pointed_byte == 1
     #assert result.pointed_byte._data.address == 10
 
@@ -240,7 +242,7 @@ val_ptr U16
 val     @val_ptr U8
 """
     data = b('1000' + '00'*14 + 'aa')
-    result = datamijn.parse(db, data)
+    result = dmparse(db, data)
     assert result.val == 0xaa
 
 def test_dynamic_pointer_complex():
@@ -249,7 +251,7 @@ val_ptr [1]U8
 val     @(val_ptr[0]) U8
 """
     data = b('0102')
-    result = datamijn.parse(db, data)
+    result = dmparse(db, data)
     assert result.val_ptr == [1]
     assert result.val == 2
     
@@ -261,7 +263,7 @@ val_count       U8
 vals            @val_ptr [val_count] U8
 """
     data = b('1000' + '03' + '00'*13 + 'aabbcc')
-    result = datamijn.parse(db, data)
+    result = dmparse(db, data)
     assert result.vals == [0xaa, 0xbb, 0xcc]
     assert isinstance(result.vals, dmtypes.Array)
 
@@ -273,7 +275,7 @@ test    {
 
 byte    @test U8
 """
-    result = datamijn.parse(dm, b("00aa"))
+    result = dmparse(dm, b("00aa"))
     assert result.test == 1
     assert result.byte == 0xaa
 
@@ -283,7 +285,7 @@ def test_void_type():
 
 token   Token
 """
-    result = datamijn.parse(dm, b("ff"))
+    result = dmparse(dm, b("ff"))
     assert result.token
     assert type(result.token).__name__ == "Token"
     assert isinstance(result.token, result.Token)
@@ -298,7 +300,7 @@ test        U8 match {
     2 => :Two
     3 => :Three
 }"""
-    result = datamijn.parse(db, b("02"))
+    result = dmparse(db, b("02"))
     assert type(result.test).__name__ == "Two"
 
 def test_match_default():
@@ -308,7 +310,7 @@ test        U8 match {
     1 => :One
     _ => :Unknown
 }"""
-    result = datamijn.parse(db, b("fe"))
+    result = dmparse(db, b("fe"))
     assert type(result.test).__name__ == "Unknown"
 
 def test_match_default_name():
@@ -318,7 +320,7 @@ test        U8 match {
     1 => :One
     x => x
 }"""
-    result = datamijn.parse(db, b("fe"))
+    result = dmparse(db, b("fe"))
     assert result.test == 0xfe
 
 
@@ -330,7 +332,7 @@ test       [2] U8 match {
 }"""
 
     with pytest.raises(Exception):
-        result = datamijn.parse(db, b("0105"))
+        result = dmparse(db, b("0105"))
     #assert result.test == ["one", 5]
 
 
@@ -340,7 +342,7 @@ test        U8 match {
     0 => "a a"
     1 => 'b b'
 }"""
-    result = datamijn.parse(db, b("01"))
+    result = dmparse(db, b("01"))
     assert result.test == "b b"
 
 
@@ -353,7 +355,7 @@ num        U8 match {
     0x40  => :FourOh
 }
 """
-    result = datamijn.parse(db, b("21"))
+    result = dmparse(db, b("21"))
     assert type(result.num).__name__ == "TwoOne"
 
 
@@ -370,7 +372,7 @@ def test_match_string():
 
 string      [5]Char
 """
-    result = datamijn.parse(db, b("4342412100"))
+    result = dmparse(db, b("4342412100"))
     assert result.string == ["C", "B", "A", "!!", result.Char.End]
 
 def test_match_char_string():
@@ -385,7 +387,7 @@ def test_match_char_string():
 
 string      [5]Char
 """
-    result = datamijn.parse(db, b("4342412100"))
+    result = dmparse(db, b("4342412100"))
     assert result.string == ["CBA!!", result.Char.End]
 
 def test_nested_match():
@@ -399,7 +401,7 @@ test     [4] U8 match {
     2    => 2
     0xff => Terminator
 }"""
-    result = datamijn.parse(db, b("00010102ff"))
+    result = dmparse(db, b("00010102ff"))
     assert result.test[0:3] == [0, 11, 2]
 
 def test_match_pointer_type():
@@ -411,7 +413,7 @@ test     [4] U8 match {
     }
     0xff => Terminator
 }"""
-    result = datamijn.parse(db, b("00010500ffaa"))
+    result = dmparse(db, b("00010500ffaa"))
     assert result.test[0] == 0
     assert result.test[1].value == 0xaa
     assert result.test[2] == 0
@@ -424,7 +426,7 @@ test     [] U8 match {
         baz U8
     }
 }"""
-    result = datamijn.parse(db, b("010200"))
+    result = dmparse(db, b("010200"))
     assert type(result.test).__name__ == "[]Foobar"
     
 
@@ -440,7 +442,7 @@ def test_bits():
 bits            SomeBits
 following_byte  U8
 """
-    result = datamijn.parse(dm, b("0744"))
+    result = dmparse(dm, b("0744"))
     assert result.bits.a == 1
     assert result.bits.b == 1
     assert result.bits.two == [1, 0]
@@ -453,14 +455,14 @@ def test_bit_type():
 bits    Bits
 
 """
-    result = datamijn.parse(dm, b("aa"))
+    result = dmparse(dm, b("aa"))
     assert result.bits == [0, 1, 0, 1, 0, 1, 0, 1]
 
 def test_bit_byte_boundary():
     dm = """
 cards   [60]B9
 """
-    result = datamijn.parse(dm, bytes([
+    result = dmparse(dm, bytes([
                                     0b00000000,
                                     0b00000010,
                                     0b00001000,
@@ -477,7 +479,7 @@ def test_empty():
 empty {
 
 }"""
-    result = datamijn.parse(dm, b(""))
+    result = dmparse(dm, b(""))
     assert result.empty != None
 
 
@@ -488,7 +490,7 @@ test0       U8 // comment after line
 test1       U8
 // comment at the end
 """
-    result = datamijn.parse(dm, b("0001"))
+    result = dmparse(dm, b("0001"))
     assert result.test0 == 0
     assert result.test1 == 1
 
@@ -497,7 +499,7 @@ def test_zero_terminated_array():
     dm = """
 numbers         [] U8
 """
-    result = datamijn.parse(dm, b("aabbcc00"))
+    result = dmparse(dm, b("aabbcc00"))
     assert result.numbers == [0xaa, 0xbb, 0xcc, 0]
 
 
@@ -508,7 +510,7 @@ numbers [] U8 match {
     number  => number
 }
 """
-    result = datamijn.parse(dm, b("000102ff"))
+    result = dmparse(dm, b("000102ff"))
     assert result.numbers[0] == 0
     assert result.numbers[1] == 1
     assert result.numbers[2] == 2
@@ -524,7 +526,7 @@ rle         [2] fold {
     = [value] * count
 }
 """
-    result = datamijn.parse(dm, b("02000501"))
+    result = dmparse(dm, b("02000501"))
     assert result.rle == [0, 0, 1, 1, 1, 1, 1]
 
 
@@ -540,7 +542,7 @@ def test_terminated_string():
 
 string      [] Char
 """
-    result = datamijn.parse(dm, b"BACA\x00")
+    result = dmparse(dm, b"BACA\x00")
     assert result.string == ["BACA", result.Char.End]
     assert str(result.string) == "BACA"
 
@@ -557,10 +559,10 @@ def test_multiple_terminated_string():
 
 string      [] Char
 """
-    result = datamijn.parse(dm, b"BACA\x00")
+    result = dmparse(dm, b"BACA\x00")
     assert result.string == ["BACA", result.Char.End1]
     assert str(result.string) == "BACA"
-    result = datamijn.parse(dm, b"CABA\xff")
+    result = dmparse(dm, b"CABA\xff")
     assert result.string == ["CABA", result.Char.End2]
     assert str(result.string) == "CABA"
 
@@ -585,7 +587,7 @@ def test_string_with_control_codes():
 
 string      [] Char
 """
-    result = datamijn.parse(dm, b"BAD \xe1\x05CAFE \xe0!\x00")
+    result = dmparse(dm, b"BAD \xe1\x05CAFE \xe0!\x00")
     assert result.string == ["BAD ", result.Char.TextSpeed(5), "CAFE ", result.Char.PlayerName, "!", result.Char.End]
     assert str(result.string) == "BAD <TextSpeed(5)>CAFE <PlayerName>!"
 
@@ -600,7 +602,7 @@ def test_match_range():
 stuff   [5]Thing
 !debug stuff
 """
-    result = datamijn.parse(dm, b("00 07 08 05 ee"))
+    result = dmparse(dm, b("00 07 08 05 ee"))
     
     assert str(result.stuff) == "0080Z"
 
@@ -611,7 +613,7 @@ byte1    Byte
 byte2    Byte
 bytes    [4]Byte
 """
-    result = datamijn.parse(dm, b"a\xe3TEST")
+    result = dmparse(dm, b"a\xe3TEST")
     assert result.byte1 == b"a"
     assert result.byte2 == b"\xe3"
     assert result.bytes == b"TEST"
@@ -628,7 +630,7 @@ bits     Byte | {
     more       [8]B1
 }
 """
-    result = datamijn.parse(dm, b("1122330744ff"))
+    result = dmparse(dm, b("1122330744ff"))
     assert result.num8 == 0x11
     assert result.num16 == 0x3322
     assert result.bits.a == 1
@@ -644,7 +646,7 @@ stuff     {
     = bytes + repeat_bytes
 } | [10]U8
 """
-    result = datamijn.parse(dm, b("01020304"))
+    result = dmparse(dm, b("01020304"))
     assert result.stuff == [1, 2, 3, 4, 3, 4, 3, 4, 3, 4]
 
 @pytest.mark.xfail
@@ -658,7 +660,7 @@ bits     Byte | {
 }
 """
     with pytest.raises(ValueError):
-        result = datamijn.parse(dm, b("11"))
+        result = dmparse(dm, b("11"))
 
 def test_yield():
     dm = """
@@ -668,8 +670,8 @@ test {
     _foo < Byte
 } | [2]U8
 """
-    result = datamijn.parse(dm, b("000102"))
-    #result = datamijn.parse(dm, b("000102 101112"))
+    result = dmparse(dm, b("000102"))
+    #result = dmparse(dm, b("000102 101112"))
     assert result.test == [0, 2]
 
 def test_nested_yield():
@@ -681,7 +683,7 @@ test {
     }
 } | [6]U8
 """
-    result = datamijn.parse(dm, b("0001060005ff"))
+    result = dmparse(dm, b("0001060005ff"))
     assert result.test == [1, 1, 6, 5, 5, 0xff]
 
 
@@ -690,7 +692,7 @@ def test_short_pipe():
     dm = """
 cards    Short | [64]B9
 """
-    result = datamijn.parse(dm, bytes([
+    result = dmparse(dm, bytes([
                                     0b00000010,
                                     0b00000000,
                                     
@@ -715,7 +717,7 @@ foo         U8
 struct.y    U8
 struct.nested.bar U8
 """
-    result = datamijn.parse(dm, b("01020304"))
+    result = dmparse(dm, b("01020304"))
     assert result.struct.x == 1
     assert result.foo == 2
     assert result.struct.y == 3
@@ -726,7 +728,7 @@ def test_foreign_assignment_error():
 unknown.x     U8
 """
     with pytest.raises(NameError):
-        result = datamijn.parse(dm, b("01"))
+        result = dmparse(dm, b("01"))
 
 def test_foreign_list_assignment():
     dm = """
@@ -737,7 +739,7 @@ stuff [4]{
 }
 stuff[].d   [4]U8
 """
-    result = datamijn.parse(dm, b("0a0b0c 1a1B1c 2a2B2c 3a3B3c 0d1d2d3d"))
+    result = dmparse(dm, b("0a0b0c 1a1B1c 2a2B2c 3a3B3c 0d1d2d3d"))
     assert result.stuff[0].a == 0x0a
     assert result.stuff[0].d == 0x0d
     assert result.stuff[3].a == 0x3a
@@ -751,7 +753,7 @@ stuff {
 stuff[].b   [4]U8
 """
     with pytest.raises(TypeError):
-        result = datamijn.parse(dm, b("00"*100))
+        result = dmparse(dm, b("00"*100))
     
     dm = """
 stuff [4] {
@@ -760,7 +762,7 @@ stuff [4] {
 stuff[].b   U8
 """
     with pytest.raises(TypeError):
-        result = datamijn.parse(dm, b("00"*100))
+        result = dmparse(dm, b("00"*100))
     
     dm = """
 stuff [5] {
@@ -769,7 +771,7 @@ stuff [5] {
 stuff[].b   [4]U8
 """
     with pytest.raises(TypeError):
-        result = datamijn.parse(dm, b("00"*100))
+        result = dmparse(dm, b("00"*100))
 
 def test_pos():
     dm = """
@@ -777,7 +779,7 @@ pos0        Pos
 short       U16
 pos1        Pos
 """
-    result = datamijn.parse(dm, b("aaaa"))
+    result = dmparse(dm, b("aaaa"))
     assert result.pos0 == 0
     assert result.short == 0xaaaa
     assert result.pos1 == 2
@@ -791,7 +793,7 @@ things      [4]{
 
 thing   U8 -> things
 """
-    result = datamijn.parse(dm, b("0001 1011 2021 3031  02"))
+    result = dmparse(dm, b("0001 1011 2021 3031  02"))
     
     assert result.thing.x == 0x20
     assert result.thing.y == 0x21
@@ -810,7 +812,7 @@ foo {
 
 thing   U8 -> foo.bar.things
 """
-    result = datamijn.parse(dm, b("0001 1011 2021 3031  02"))
+    result = dmparse(dm, b("0001 1011 2021 3031  02"))
     
     assert result.thing.x == 0x20
     assert result.thing.y == 0x21
@@ -825,7 +827,7 @@ things      [4]{
 
 thing   2 -> things
 """
-    result = datamijn.parse(dm, b("0001 1011 2021 3031"))
+    result = dmparse(dm, b("0001 1011 2021 3031"))
     assert result.thing.x == 0x20
     assert result.thing.y == 0x21
 
@@ -838,14 +840,14 @@ things      [4]{
 thing   U8 -> things
 """
     with pytest.raises(datamijn.utils.ForeignKeyError):
-        result = datamijn.parse(dm, b("00 11 21 31  05"))
+        result = dmparse(dm, b("00 11 21 31  05"))
         # a second resolve pass would catch this earlier
         result.thing.x
 
 def test_null():
     dm = "x Null"
     
-    result = datamijn.parse(dm, b(""))
+    result = dmparse(dm, b(""))
     assert result.x == None
 
 '''
@@ -861,7 +863,7 @@ FRUIT U8 enum {
 _start {
     fruit       = FRUIT.BANANA
 }"""
-    result = datamijn.parse(dm, b"")
+    result = dmparse(dm, b"")
     # TODO should enums be accessible ad result.FRUIT.BANANA?
     assert result.fruit == result._structs.FRUIT.BANANA
     assert result.fruit == "BANANA"
@@ -874,7 +876,7 @@ dummy_array  [4] {
     index       I
 }
 """
-    result = datamijn.parse(dm, b"")
+    result = dmparse(dm, b"")
     for i in range(4):
         assert result.dummy_array[i].index == i
 
@@ -888,7 +890,7 @@ foo {
     c       U8
 }
 """
-    result = datamijn.parse(dm, b("0001020304"))
+    result = dmparse(dm, b("0001020304"))
     assert result.foo.a == 0x00
     assert result.foo.b == 0x02
     assert result.foo.c == 0x04
@@ -910,7 +912,7 @@ def test_rgb_color(with_pipe):
 
 pal MyPalette
 """
-    result = datamijn.parse(dm, b("abcdabcdabcdabcd"))
+    result = dmparse(dm, b("abcdabcdabcdabcd"))
     assert len(result.pal) == 4
     assert isinstance(result.pal[0], datamijn.gfx.Color)
     assert result.pal[0].r == (11, 13)[with_pipe]
@@ -929,7 +931,7 @@ def test_if():
     false   1
 }
 """
-    result = datamijn.parse(dm, b"")
+    result = dmparse(dm, b"")
     assert result.true == 1
     with pytest.raises(AttributeError):
         assert result.false
@@ -942,7 +944,7 @@ def test_if_else():
     false   1
 }
 """
-    result = datamijn.parse(dm, b"")
+    result = dmparse(dm, b"")
     assert result.true == 1
     with pytest.raises(AttributeError):
         assert result.false == None
@@ -961,7 +963,7 @@ def test_if_else_overlap():
     z   0
 }
 """
-    result = datamijn.parse(dm, b"")
+    result = dmparse(dm, b"")
     assert result.a == 1
     assert result.b == 1
     assert result.c == 1
@@ -980,7 +982,7 @@ def test_if_else_cross():
     x   0
 }
 """
-    result = datamijn.parse(dm, b"")
+    result = dmparse(dm, b"")
     print(result)
     assert result.x == 0
     assert result.y == 0
@@ -993,7 +995,7 @@ def test_assert():
 Byte        U8
 !assert Byte == 5
 """
-    result = datamijn.parse(dm, b("05"))
+    result = dmparse(dm, b("05"))
     assert result.Byte == 5
     
 '''
@@ -1002,7 +1004,7 @@ def test_type_name_error():
     dm = "something     NoExist"
     
     with pytest.raises(datamijn.ResolveError):
-        result = datamijn.parse(dm, b"")
+        result = dmparse(dm, b"")
 
 def test_rename_list():
     dm = """
@@ -1013,7 +1015,7 @@ def test_rename_list():
 test Test
 """
     
-    result = datamijn.parse(dm, b("00"))
+    result = dmparse(dm, b("00"))
     assert type(result.test).__name__ == "Test"
 
 
@@ -1026,7 +1028,7 @@ test3 U8
 """
     
     with pytest.raises(datamijn.utils.ReadError):
-        result = datamijn.parse(dm, b("0001"))
+        result = dmparse(dm, b("0001"))
 
 def test_read_error_lenient():
     dm = """
@@ -1036,7 +1038,7 @@ test2 U8
 test3 U8
 """
     
-    result = datamijn.parse(dm, b("0001"), lenient=True)
+    result = dmparse(dm, b("0001"), lenient=True)
     assert result.test0 == 0
     assert result.test1 == 1
     assert isinstance(result.test2, datamijn.utils.ReadError)
@@ -1054,7 +1056,7 @@ object1 {
     }
 }
 """
-    result = datamijn.parse(dm, b("aa"))
+    result = dmparse(dm, b("aa"))
     assert result.object1.object2.x.foo == 0xaa
 
 def test_function():
@@ -1064,7 +1066,7 @@ def test_function():
 x   TimesFive(U8)
 y   TimesFive(U16)
 """
-    result = datamijn.parse(dm, b("010200"))
+    result = dmparse(dm, b("010200"))
     assert result.x == 5
     assert result.y == 10
 
@@ -1074,7 +1076,7 @@ def test_function_multiple_parameters():
 
 x   Added(U8, U8, U8)
 """
-    result = datamijn.parse(dm, b("010401"))
+    result = dmparse(dm, b("010401"))
     assert result.x == 6
 
 def test_function_typedef():
@@ -1082,13 +1084,33 @@ def test_function_typedef():
 :TimesFive(Num) Num * 5
 :TimesFiveU8    TimesFive(U8)
 :TimesFiveU16   TimesFive(U16)
+:TimesFivePos   TimesFive(Pos)
 
 x   TimesFiveU8
 y   TimesFiveU16
+z   TimesFivePos
+a   TimesFive(5)
 """
-    result = datamijn.parse(dm, b("020400"))
+    result = dmparse(dm, b("020400"))
     assert result.x == 10
     assert result.y == 20
+    assert result.z == 15
+    assert result.a == 5*5
+
+def test_aaa():
+    dm = """
+:GBAddrTest(Bank, Pointer) Pointer % 0x4000 + Bank * 0x4000
+
+:GBAddrU8U16   GBAddrTest(U8, U16)
+//test0    GBAddrU8U16
+test1    GBAddrTest(0, 0)
+"""
+    result = dmparse(dm, b("0001020304050607"))
+    print(result._structs._types['GBAddrTest'])
+    for name, field in result._structs._fields:
+        print(name, field, field.__name__)
+    #assert result.test0 == 0
+    assert result.test1 == 0
 
 def test_function_lowercase_argument():
     dm = """
@@ -1098,7 +1120,7 @@ x   TimesFive(U8)
 y   TimesFive(U16)
 """
     with pytest.raises(datamijn.ResolveError):
-        result = datamijn.parse(dm, b("010200"))
+        result = dmparse(dm, b("010200"))
 
 def test_function_non_call():
     dm = """
@@ -1106,8 +1128,8 @@ def test_function_non_call():
 
 x   TimesFive
 """
-    with pytest.raises(datamijn.ParseError):
-        result = datamijn.parse(dm, b("010200"))
+    with pytest.raises(dmparseError):
+        result = dmparse(dm, b("010200"))
 
 def test_function_wrong_parameters():
     dm = """
@@ -1116,7 +1138,7 @@ def test_function_wrong_parameters():
 x   Added(U8)
 """
     with pytest.raises(datamijn.ResolveError):
-        result = datamijn.parse(dm, b("0104"))
+        result = dmparse(dm, b("0104"))
 
 def test_import(tmpdir):
     tmpdir.join("color.dm").write("""
@@ -1140,7 +1162,7 @@ color1      Color
 color2      ColorAlias
 """)
     
-    result = datamijn.parse(open(tmpdir.join("test.dm")), b("020100"))
+    result = dmparse(open(tmpdir.join("test.dm")), b("020100"))
     assert result.color0 == result.Color.Green
     assert result.color1 == result.Color.Red
     assert result.color2 == result.Color.White
@@ -1156,7 +1178,7 @@ tile    {tile_type}
 !save tile
 """)
     
-    result = datamijn.parse(open(tmpdir.join("test.dm")), b('0011223344556677')*2, tmpdir.join("x"))
+    result = dmparse(open(tmpdir.join("test.dm")), b('0011223344556677')*2, tmpdir.join("x"))
     assert str(result.tile._filename) == "tile.png"
     assert open(tmpdir.join("/x/tile.png"))
 
@@ -1167,7 +1189,7 @@ tiles    [20]Tile1BPP
 !save tiles
 """)
     
-    result = datamijn.parse(open(tmpdir.join("test.dm")), b('0011223344556677')*20, tmpdir.join("x"))
+    result = dmparse(open(tmpdir.join("test.dm")), b('0011223344556677')*20, tmpdir.join("x"))
     assert str(result.tiles._filename) == "tiles.png"
     assert open(tmpdir.join("/x/tiles.png"))
 
@@ -1178,7 +1200,7 @@ pics    [5][2][2]Tile1BPP
 !save pics
 """)
     
-    result = datamijn.parse(open(tmpdir.join("test.dm")), b('0011223344556677')*20, tmpdir.join("x"))
+    result = dmparse(open(tmpdir.join("test.dm")), b('0011223344556677')*20, tmpdir.join("x"))
     assert str(result.pics[0]._filename) == "pics/0.png"
     assert str(result.pics[4]._filename) == "pics/4.png"
     for i in range(5):
@@ -1193,7 +1215,7 @@ pics    [5]{
 !save pics
 """)
     
-    result = datamijn.parse(open(tmpdir.join("test.dm")), b('0011223344556677')*20, tmpdir.join("x"))
+    result = dmparse(open(tmpdir.join("test.dm")), b('0011223344556677')*20, tmpdir.join("x"))
     for i in range(5):
         assert open(tmpdir.join(f"/x/pics/{i}.png"))
 
@@ -1207,7 +1229,7 @@ pics    [5]{
 !save pics
 """)
     
-    result = datamijn.parse(open(tmpdir.join("test.dm")), b('abcdabcd')*5 + b('0011223344556677')*20, tmpdir.join("x"))
+    result = dmparse(open(tmpdir.join("test.dm")), b('abcdabcd')*5 + b('0011223344556677')*20, tmpdir.join("x"))
     for i in range(5):
         assert open(tmpdir.join(f"/x/pics/{i}.png"))
 
@@ -1219,7 +1241,7 @@ pics     _pics | palettes
 !save pics
 """)
     
-    result = datamijn.parse(open(tmpdir.join("test.dm")), b('abcdabcd')*5 + b('0011223344556677')*20, tmpdir.join("x"))
+    result = dmparse(open(tmpdir.join("test.dm")), b('abcdabcd')*5 + b('0011223344556677')*20, tmpdir.join("x"))
     for i in range(5):
         assert open(tmpdir.join(f"/x/pics/{i}.png"))
 
@@ -1243,7 +1265,7 @@ pics     _pics | _palettes
 !save pics
 """)
     
-    result = datamijn.parse(open(tmpdir.join("test.dm")), b('abcdabcd')*3 + b('0011223344556677')*20, tmpdir.join("x"))
+    result = dmparse(open(tmpdir.join("test.dm")), b('abcdabcd')*3 + b('0011223344556677')*20, tmpdir.join("x"))
     assert open(tmpdir.join(f"/x/pics/foo.png"))
     assert open(tmpdir.join(f"/x/pics/bar.png"))
     assert open(tmpdir.join(f"/x/pics/nested/baz.png"))
@@ -1265,12 +1287,12 @@ bank2pos @sym.Bank2  Pos
 
 """)
     
-    result = datamijn.parse(open(tmpdir.join("test.dm")), b("000102030405060708"))
+    result = dmparse(open(tmpdir.join("test.dm")), b("000102030405060708"))
     assert result.byte8 == 8
     assert result.bank2pos == 0x8abc
 
 def test_complex():
-    result = datamijn.parse(open("datamijn/test/test2.dm"),
+    result = dmparse(open("datamijn/test/test2.dm"),
         open("datamijn/test/test.bin", "rb"))
     assert result.version == 0x123
     # don't test the rest because
@@ -1283,10 +1305,10 @@ def test_cleanup():
 }
 
 a A"""
-    result = datamijn.parse(dm, b"\x00")
+    result = dmparse(dm, b"\x00")
     
     with pytest.raises(datamijn.ResolveError):
         dm2 = "a A"
-        result = datamijn.parse(dm2, b"\x00")
+        result = dmparse(dm2, b"\x00")
 
 

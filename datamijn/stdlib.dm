@@ -26,3 +26,4 @@
 //}
 
 :GBAddr(Bank, Pointer) Pointer % 0x4000 + Bank * 0x4000
+//:Test GBAddr(U16, U16)

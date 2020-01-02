@@ -52,6 +52,8 @@ class DatamijnObject():
     _inherited_fields = []
     _arguments = []
     
+    _resolved = False
+    
     #def __init__(self, value=None, data=None):
     #    self._value = value
     #    self._data = data
@@ -84,7 +86,19 @@ class DatamijnObject():
         if name is None:
             newtype.rename()
         return newtype
-        
+    
+    @classmethod
+    def _resolve(self, ctx, path):
+        return self
+    
+    @classmethod
+    def resolve(self, *args, **kwargs):
+        if self._resolved:
+            raise ResolveError(args[1] if args else None, f'Double resolve on type {full_type_name(self)} (internal error).')
+        resolved = self._resolve(*args, **kwargs)
+        resolved._resolved = True
+        return resolved
+    
     @classmethod
     def _parse_stream(self, stream, ctx, path, index=None, **kwargs):
         raise NotImplementedError()
@@ -124,10 +138,6 @@ class DatamijnObject():
     @classmethod
     def write(self, stream):
         raise NotImplementedError()
-        
-    @classmethod
-    def resolve(self, ctx, path):
-        return self
     
     @classmethod
     def infer_type(self):
@@ -159,7 +169,7 @@ class Token(DatamijnObject):
         pass
     
     @classmethod
-    def resolve(self, ctx, path):
+    def _resolve(self, ctx, path):
         return self
     
     @classmethod
@@ -185,7 +195,7 @@ class Terminator(Token): pass
 class Null(DatamijnObject):
     _size = 0
     @classmethod
-    def resolve(self, ctx, path):
+    def _resolve(self, ctx, path):
         return self
     
     @classmethod
@@ -329,7 +339,7 @@ class Array(DatamijnObject):
     }
     
     @classmethod
-    def resolve(self, ctx, path):
+    def _resolve(self, ctx, path):
         if type(self._length) == int:
             self._final_length = True
         elif self._length != None:
@@ -524,7 +534,7 @@ class Struct(dict, DatamijnObject):
     _rich = True
     
     @classmethod
-    def resolve(self, ctx=None, path=None, stdlib=None):
+    def _resolve(self, ctx=None, path=None, stdlib=None):
         if not ctx: ctx = []
         if not path: path = []
         ctx.append(self)
@@ -746,7 +756,8 @@ class Name(DatamijnObject):
     #_arguments
     
     @classmethod
-    def resolve(self, ctx, path):
+    def _resolve(self, ctx, path):
+        print(f"Name {self.__name__}... making {self._type.__name__}")
         newtype = self._type.make()
         newtype = newtype.resolve(ctx, path)
         newtype.rename(self._name)
@@ -759,7 +770,7 @@ class Function(DatamijnObject):
     #_arguments
     
     @classmethod
-    def resolve(self, ctx, path):
+    def _resolve(self, ctx, path):
         for argument in self._arguments:
             if argument[0] not in UPPERCASE:
                 raise ResolveError(path, 'Function arguments must start with capital letter.')
@@ -770,6 +781,9 @@ class Function(DatamijnObject):
         if len(self._arguments) != len(arguments):
             raise ResolveError(path, f"Function {self.__name__} takes {len(self._arguments)} argument{'s' if len(arguments)!=1 else ''}, however {len(arguments)} {'was' if len(arguments)==1 else 'were'} provided.")
         ctx.append(dict(zip(self._arguments, arguments)))
+        # TODO XXX it is not enough to make() the type here,
+        # because its subtypes will be simply copied and resolved
+        # once evenon further calls.
         newtype = self._type.make()
         newtype = newtype.resolve(ctx, path + ["()"])
         newtype.rename(self._name)
@@ -787,7 +801,7 @@ class Call(DatamijnObject):
     #_arguments
     
     @classmethod
-    def resolve(self, ctx, path):
+    def _resolve(self, ctx, path):
         self._func = self._func.resolve(ctx, path)
         arguments = []
         for i, argument in enumerate(self._arguments):
@@ -798,7 +812,7 @@ class Call(DatamijnObject):
         
         self._resolved_arguments = arguments
         self._expr = self._func.call(ctx, path, arguments)
-        argstring = ", ".join(a.__name__ for a in self._arguments)
+        argstring = ", ".join(a.__name__ for a in self._resolved_arguments)
         self.__name__ = f"{self._func.__name__}({argstring})"
         self._final_type = self._expr._final_type
         return self
@@ -806,7 +820,9 @@ class Call(DatamijnObject):
     @classmethod
     def parse_stream(self, stream, ctx, path, index=None, **kwargs):
         ctx.append(dict(zip(self._func._arguments, self._resolved_arguments)))
+        print(f"Will parse {full_type_name(self._func)} as {full_type_name(self._expr)}, that being {self._expr.__bases__[0].__bases__[0]}, with {ctx}")
         result = self._expr.parse_stream(stream, ctx, path + ["()"])
+        print(f"Result was {result}")
         ctx.pop()
         return result
 
@@ -815,7 +831,7 @@ class ExprName(DatamijnObject):
     #_name
     
     @classmethod
-    def resolve(self, ctx, path):
+    def _resolve(self, ctx, path):
         if self._name[0] in UPPERCASE:
             for context in reversed(ctx):
                 if type(context) == dict:
@@ -865,7 +881,7 @@ class ExprName(DatamijnObject):
 
 class NestedExprName(ExprName):
     @classmethod
-    def resolve(self, ctx, path):
+    def _resolve(self, ctx, path):
         return self
     
     @classmethod
@@ -906,7 +922,7 @@ class ExprOp(DatamijnObject):
     #_op
     
     @classmethod
-    def resolve(self, ctx, path):
+    def _resolve(self, ctx, path):
         self._left = self._left.resolve(ctx, path)
         self._right = self._right.resolve(ctx, path)
         self._final = self._left._final and self._right._final
@@ -945,8 +961,11 @@ class ExprOp(DatamijnObject):
     
     @classmethod
     def parse_stream(self, stream, ctx, path, index=None, **kwargs):
+        print(f"Parsingin expr_op, am {self.__name__}, left {full_type_name(self._left)}")
         left = self._left.parse_stream(stream, ctx, path, index=index, **kwargs)
         right = self._right.parse_stream(stream, ctx, path, index=index, **kwargs)
+        result = self._op(left, right)
+        print(f"Result of expr_op was {result}")
         return self._op(left, right)
 
 class ExprAttr(DatamijnObject):
@@ -954,7 +973,7 @@ class ExprAttr(DatamijnObject):
     #_left
     #_name
     @classmethod
-    def resolve(self, ctx, path):
+    def _resolve(self, ctx, path):
         self._left = self._left.resolve(ctx, path)
         if not issubclass(self._left.infer_type(), Struct):
             raise ResolveError(path, f"Only structs may be attributed, not {full_type_name(self._left.infer_type())}.")
@@ -972,7 +991,7 @@ class ExprIndex(DatamijnObject):
     #_left
     #_index
     @classmethod
-    def resolve(self, ctx, path):
+    def _resolve(self, ctx, path):
         self._left = self._left.resolve(ctx, path)
         self._index = self._index.resolve(ctx, path)
         if not issubclass(self._left.infer_type(), Array):
@@ -995,7 +1014,7 @@ class Return(DatamijnObject):
     #_expr
     
     @classmethod
-    def resolve(self, ctx, path):
+    def _resolve(self, ctx, path):
         self._expr = self._expr.resolve(ctx, path)
         self._yields = self._expr._yields
         self._final_type = self._expr.infer_type()
@@ -1036,7 +1055,7 @@ class Pointer(DatamijnObject):
     #_addr
     
     @classmethod
-    def resolve(self, ctx, path):
+    def _resolve(self, ctx, path):
         self._type = self._type.resolve(ctx, path)
         self._addr = self._addr.resolve(ctx, path + ["(addr)"])
         if not issubclass(self._addr.infer_type(), int):
@@ -1100,7 +1119,7 @@ class PipePointer(Pointer):
 class Yield(DatamijnObject):
     _yields = True
     @classmethod
-    def resolve(self, ctx, path):
+    def _resolve(self, ctx, path):
         # TODO yields must not be assigned
         self._type = self._type.resolve(ctx, path)
         self.__name__ = f"{self._type.__name__}Yield"
@@ -1141,7 +1160,7 @@ class MatchTypeMetaclass(type):
 class MatchType(DatamijnObject, metaclass=MatchTypeMetaclass):
     _concat_result = False
     @classmethod
-    def resolve(self, ctx, path):
+    def _resolve(self, ctx, path):
         self._type = self._type.resolve(ctx, path)
         self._yields = self._type._yields
         self._final_type = None
@@ -1312,7 +1331,7 @@ class Pipe(DatamijnObject):
     # _left_type
     # _right_type
     @classmethod
-    def resolve(self, ctx, path):
+    def _resolve(self, ctx, path):
         self._left_type = self._left_type.resolve(ctx, path + ["(left)"])
         self._right_type = self._right_type.resolve(ctx, path + ["(right)"])
         if not self._left_type._yields \
@@ -1358,7 +1377,7 @@ class Inheritance(DatamijnObject):
     # _left_type
     # _right_type
     @classmethod
-    def resolve(self, ctx, path):
+    def _resolve(self, ctx, path):
         if not issubclass(self._left_type, Struct):
             raise ResolveError(path, f"""Can only apply inheritance to Structs
 Attempted to inherit {self._left_type.__name__} from {self._right_type.__name__}""")
@@ -1382,7 +1401,7 @@ class ForeignKey(DatamijnObject):
         self._ctx = ctx
     
     @classmethod
-    def resolve(self, ctx, path):
+    def _resolve(self, ctx, path):
         self._type = self._type.resolve(ctx, path)
         self._yields = self._type._yields
         
@@ -1464,7 +1483,7 @@ class If(DatamijnObject):
     # _true_struct
     # _false_struct
     @classmethod
-    def resolve(self, ctx, path):
+    def _resolve(self, ctx, path):
         self._expr = self._expr.resolve(ctx, path)
         self._true_struct = self._true_struct.resolve(ctx, path)
         self._true_struct._embed = True
@@ -1493,7 +1512,7 @@ class SaveField(Field):
     def __init__(self, field_name):
         self._field_name = field_name
     
-    def resolve(self, ctx, path):
+    def _resolve(self, ctx, path):
         return self
     
     def parse_stream(self, stream, ctx, path, index=None, **kwargs):
@@ -1508,7 +1527,7 @@ class DebugField(Field):
     def __init__(self, field_name):
         self._field_name = field_name
     
-    def resolve(self, ctx, path):
+    def _resolve(self, ctx, path):
         return self
     
     def parse_stream(self, stream, ctx, path, index=None, **kwargs):
