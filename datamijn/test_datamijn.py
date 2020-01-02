@@ -1077,6 +1077,19 @@ x   Added(U8, U8, U8)
     result = datamijn.parse(dm, b("010401"))
     assert result.x == 6
 
+def test_function_typedef():
+    dm = """
+:TimesFive(Num) Num * 5
+:TimesFiveU8    TimesFive(U8)
+:TimesFiveU16   TimesFive(U16)
+
+x   TimesFiveU8
+y   TimesFiveU16
+"""
+    result = datamijn.parse(dm, b("020400"))
+    assert result.x == 10
+    assert result.y == 20
+
 def test_function_lowercase_argument():
     dm = """
 :TimesFive(num) num * 5

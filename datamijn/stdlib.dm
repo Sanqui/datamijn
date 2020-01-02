@@ -25,4 +25,4 @@
 //    = bytes
 //}
 
-//:GBAddr $pointer $bank      pointer % 0x4000 + bank * 0x4000
+:GBAddr(Bank, Pointer) Pointer % 0x4000 + Bank * 0x4000

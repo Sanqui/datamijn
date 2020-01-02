@@ -747,7 +747,7 @@ class Name(DatamijnObject):
     
     @classmethod
     def resolve(self, ctx, path):
-        newtype = self._type.make(_arguments=self._arguments)
+        newtype = self._type.make()
         newtype = newtype.resolve(ctx, path)
         newtype.rename(self._name)
         return newtype
@@ -798,6 +798,9 @@ class Call(DatamijnObject):
         
         self._resolved_arguments = arguments
         self._expr = self._func.call(ctx, path, arguments)
+        argstring = ", ".join(a.__name__ for a in self._arguments)
+        self.__name__ = f"{self._func.__name__}({argstring})"
+        self._final_type = self._expr._final_type
         return self
     
     @classmethod
