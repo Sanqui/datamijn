@@ -1118,6 +1118,18 @@ x   Added(U8)
     with pytest.raises(datamijn.ResolveError):
         result = datamijn.parse(dm, b("0104"))
 
+def test_function_complex():
+    ''' This tests make(make_all=True) behavior, i.e. deep make '''
+    dm = """
+:GBAddrTest(Bank, Pointer) Pointer % 0x4000 + Bank * 0x4000
+:GBAddrU8U16   GBAddrTest(U8, U16)
+test0    GBAddrU8U16
+test1    GBAddrTest(0, 0)
+"""
+    result = datamijn.parse(dm, b("0001020304050607"))
+    assert result.test0 == 33024
+    assert result.test1 == 0
+
 def test_import(tmpdir):
     tmpdir.join("color.dm").write("""
 :Color   U8 match {

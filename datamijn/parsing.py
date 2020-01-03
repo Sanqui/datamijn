@@ -57,7 +57,7 @@ class TreeToStruct(Transformer):
         return eval(tree[0]) # this is safe, trust me
     
     def match_key_int(self, tree):
-        return int(tree[0])
+        return DatamijnInt.__new__(DatamijnInt, tree[0])
     
     def match_key_string(self, tree):
         return str(tree[0])
@@ -117,7 +117,7 @@ class TreeToStruct(Transformer):
     def expr_pipe(self, tree):
         left_type, right_type = tree
         return Pipe.make(None,
-            _left_type=left_type, _right_type=right_type)
+            left=left_type, right=right_type)
     
     def expr_inherit(self, tree):
         left_type, name = tree
@@ -132,17 +132,17 @@ class TreeToStruct(Transformer):
 Attempted to inherit {left_type.__name__} from {name}""")
         
         return Inheritance.make(None,
-            _left_type=left_type, _right_type=right_type)
+            left=left_type, right=right_type)
     
     def expr_attr(self, tree):
         left, name = tree
         return ExprAttr.make(None,
-            _left=left, _name=name)
+            left=left, _name=name)
     
     def expr_index(self, tree):
         left, index = tree
         return ExprIndex.make(f"({left.__name__})[{index.__name__}]",
-            _left=left, _index=index)
+            left=left, index=index)
     
     def expr_infix(self, tree):
         OPERATIONS = {
@@ -156,7 +156,7 @@ Attempted to inherit {left_type.__name__} from {name}""")
         }
         left, sign, right = tree
         return ExprOp.make(f"({left.__name__}{sign}{right.__name__})",
-            _left=left, _right=right, _op=OPERATIONS[sign])
+            left=left, right=right, _op=OPERATIONS[sign])
     
     def expr_bracket(self, tree):
         return tree[0]
@@ -164,7 +164,7 @@ Attempted to inherit {left_type.__name__} from {name}""")
     def expr_foreign_key(self, tree):
         type_, field_name = tree
         return ForeignKey.make(f"{type_.__name__}ForeignKey",
-            _type=type_, _field_name=field_name)
+            type=type_, _field_name=field_name)
     
     def expr_yield(self, tree):
         type = tree[0]
@@ -173,12 +173,12 @@ Attempted to inherit {left_type.__name__} from {name}""")
     def expr_match(self, tree):
         type = tree[0]
         match = tree[1]
-        return MatchType.make(f"{type.__name__}Match", _type=type, _match=match)
+        return MatchType.make(f"{type.__name__}Match", type=type, _match=match)
         
     def expr_char_match(self, tree):
         type = tree[0]
         match = tree[1]
-        return CharMatchType.make(f"{type.__name__}Match", _type=type, _match=match)
+        return CharMatchType.make(f"{type.__name__}Match", type=type, _match=match)
     
     def expr_name(self, f):
         name = str(f[0])
@@ -205,17 +205,17 @@ Attempted to inherit {left_type.__name__} from {name}""")
             count = count_tree.children[0]
         else:
             count = None
-        return Array.make(f"[]{type_.__name__}", _parsetype=type_, _length=count)
+        return Array.make(f"[]{type_.__name__}", parsetype=type_, length=count)
     
     def expr_ptr(self, f):
         addr = f[0]
         type_ = f[1]
-        return Pointer.make(None, _addr=addr, _type=type_)
+        return Pointer.make(None, addr=addr, type=type_)
     
     def expr_pipeptr(self, f):
         addr = f[0]
         type_ = f[1]
-        return PipePointer.make(f"|@({addr.__name__})({type_.__name__})", _addr=addr, _type=type_)
+        return PipePointer.make(f"|@({addr.__name__})({type_.__name__})", addr=addr, type=type_)
     
     def expr_arguments(self, f):
         return [str(x) for x in f]
@@ -229,24 +229,24 @@ Attempted to inherit {left_type.__name__} from {name}""")
             arguments = []
             type_ = f[1]
         
-        return Function.make(_name=name, _type=type_, _arguments=arguments)
+        return Function.make(_name=name, type=type_, _arguments=arguments)
     
     def expr_call(self, f):
         expr = f[0]
         arguments = f[1:]
         
-        return Call.make(_func=expr, _arguments=arguments)
+        return Call.make(func=expr, arguments=arguments)
     
     def expr_typedef(self, f):
         name = f[0].value
         type_ = f[1]
         
-        return Name.make(_name=name, _type=type_)
+        return Name.make(_name=name, type=type_)
     
     def expr_typedeftoken(self, f):
         name = f[0].value
         
-        return Name.make(_name=name, _type=Token, _arguments=[])
+        return Name.make(_name=name, type=Token)
     
     #
     # field
@@ -267,7 +267,7 @@ Attempted to inherit {left_type.__name__} from {name}""")
     def field_return(self, f):
         expr = f[0]
         
-        return Return.make("Return", _expr=expr)
+        return Return.make("Return", expr=expr)
     
     def field_if(self, f):
         expr = f[0]

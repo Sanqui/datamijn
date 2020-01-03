@@ -1,6 +1,6 @@
 import operator
 from io import BytesIO, BufferedIOBase
-from datamijn.utils import UPPERCASE, full_type_name, ResolveError, ParseError, ForeignKeyError, ReadError, SaveNotImplementedError
+from datamijn.utils import UPPERCASE, full_type_name, ResolveError, ParseError, ForeignKeyError, ReadError, SaveNotImplementedError, MakeError
 
 class IOWithBits(BufferedIOBase):
     def __init__(self, *args, **kvargs):
@@ -42,6 +42,31 @@ class IOWithBits(BufferedIOBase):
 
 BytesIOWithBits = type(f"BytesIOWithBits", (IOWithBits, BytesIO), {})
 
+class Subs(dict):
+    def __init__(self, *subs, **kwargs):
+        for sub in subs:
+            self[sub] = UninitializedSub
+        for key, item in kwargs.items():
+            if isinstance(item, list):
+                for el in item:
+                    if not issubclass(type(el), type) or not issubclass(el, DatamijnObject):
+                        raise MakeError(f"Sub {key}: Element in list, {el}, is not a DatamijnObject, rather {type(el)} (internal error).")
+            elif item is not None and (not issubclass(type(item), type) or not issubclass(item, DatamijnObject)):
+                raise MakeError(f"Sub {key}: {item} is not a DatamijnObject, rather {type(item)} (internal error).")
+            self[key] = item
+    
+    def __getattr__(self, attr):
+        if attr in self:
+            return self[attr]
+        else:
+            raise AttributeError(attr)
+    
+    def __setattr__(self, attr, val):
+        if attr in self:
+            self[attr] = val
+        else:
+            self.attr = val
+
 class DatamijnObject():
     _size = None
     _char = False
@@ -51,6 +76,7 @@ class DatamijnObject():
     _final_type = None
     _inherited_fields = []
     _arguments = []
+    _subs = Subs()
     
     #def __init__(self, value=None, data=None):
     #    self._value = value
@@ -79,10 +105,24 @@ class DatamijnObject():
             self.__name__ = name
     
     @classmethod
-    def make(self, name=None, bases=[], **kwargs):
+    def make(self, name=None, bases=[], make_all=False, **kwargs):
         newtype = type(name or self.__name__, (self, *bases), kwargs)
         if name is None:
             newtype.rename()
+        
+        newsubs = {}
+        for subname, subval in self._subs.items():
+            if subval == UninitializedSub:
+                if subname not in kwargs:
+                    raise MakeError(f"{self.__name__} takes sub `{subname}`, but not provided (internal error).")
+                newsubs[subname] = kwargs[subname]
+            else:
+                if make_all:
+                    newsubs[subname] = subval.make()
+                else:
+                    newsubs[subname] = subval
+
+        newtype._subs = Subs(**newsubs)
         return newtype
         
     @classmethod
@@ -147,6 +187,15 @@ class DatamijnObject():
         pass
         #raise SaveNotImplementedError(path, f"{type(self).__name__} doesn't implement !save")
     
+class UninitializedSub(DatamijnObject):
+    @classmethod
+    def make(self, name=None, bases=[], **kwargs):
+        raise NotImplementedError()
+    
+    @classmethod
+    def resolve(self, ctx, path):
+        raise NotImplementedError()
+
 #class PipedDatamijnObject(DatamijnObject):
 #    _pipeable = True
 #    @classmethod
@@ -319,6 +368,7 @@ class U32(DatamijnInt):
         return value
 
 class Array(DatamijnObject):
+    _subs = Subs('parsetype', 'length')
     # _child_type
     # _length
     _concat = False
@@ -330,14 +380,16 @@ class Array(DatamijnObject):
     
     @classmethod
     def resolve(self, ctx, path):
-        if type(self._length) == int:
+        if type(self._subs.length) == int:
             self._final_length = True
-        elif self._length != None:
-            self._length = self._length.resolve(ctx, path)
+        elif self._subs.length != None:
+            self._length = self._subs.length.resolve(ctx, path)
             #if self._length._final:
             #    self._length = self._length.parse_stream(None, None, path)
             #    self._final_length = True
-        self._parsetype = self._parsetype.resolve(ctx, path)
+        else:
+            self._length = None
+        self._parsetype = self._subs.parsetype.resolve(ctx, path)
         
         new_array_type = None
         for elem_types, new_class in self.ARRAY_CLASSES.items():
@@ -369,7 +421,7 @@ class Array(DatamijnObject):
         
         name = f"[{length_name}]{self._child_type.__name__}{tail_name}"
         
-        new = new_array_type.make(name, _parsetype=self._parsetype, _child_type=self._child_type, _length=self._length, _final_length=self._final_length)
+        new = new_array_type.make(name, parsetype=self._subs.parsetype, _parsetype=self._parsetype, _child_type=self._child_type, length=self._subs.length, _length=self._length, _final_length=self._final_length)
         new._yields = self._parsetype._yields
         return new
         
@@ -741,21 +793,20 @@ class LenientStruct(Struct):
 
 class Name(DatamijnObject):
     _namestring = "{self._name}"
+    _subs = Subs("type")
     #_name
-    #_type
-    #_arguments
     
     @classmethod
     def resolve(self, ctx, path):
-        newtype = self._type.make()
+        newtype = self._subs.type.make()
         newtype = newtype.resolve(ctx, path)
         newtype.rename(self._name)
         return newtype
 
 class Function(DatamijnObject):
     _namestring = "{self._name}"
+    _subs = Subs('type')
     #_name
-    #_type
     #_arguments
     
     @classmethod
@@ -770,7 +821,10 @@ class Function(DatamijnObject):
         if len(self._arguments) != len(arguments):
             raise ResolveError(path, f"Function {self.__name__} takes {len(self._arguments)} argument{'s' if len(arguments)!=1 else ''}, however {len(arguments)} {'was' if len(arguments)==1 else 'were'} provided.")
         ctx.append(dict(zip(self._arguments, arguments)))
-        newtype = self._type.make()
+        # It is not enough to make() the type here,
+        # because its subtypes will be simply copied and resolved
+        # once even on further calls.  This is why we make_all.
+        newtype = self._subs.type.make(make_all=True)
         newtype = newtype.resolve(ctx, path + ["()"])
         newtype.rename(self._name)
         ctx.pop()
@@ -782,15 +836,14 @@ class Function(DatamijnObject):
         
 
 class Call(DatamijnObject):
-    _namestring = "{self._func.__name__}({self._arguments})"
-    #_func
-    #_arguments
+    _namestring = "{self._subs.func.__name__}({self._arguments})"
+    _subs = Subs('func', 'arguments')
     
     @classmethod
     def resolve(self, ctx, path):
-        self._func = self._func.resolve(ctx, path)
+        self._func = self._subs.func.resolve(ctx, path)
         arguments = []
-        for i, argument in enumerate(self._arguments):
+        for i, argument in enumerate(self._subs.arguments):
             arguments.append(argument.resolve(ctx, path+[f"(argument {i})"]))
         
         if not issubclass(self._func, Function):
@@ -901,14 +954,13 @@ class ExprString(DatamijnObject):
         return self._string
 
 class ExprOp(DatamijnObject):
-    #_left
-    #_right
+    _subs = Subs('left', 'right')
     #_op
     
     @classmethod
     def resolve(self, ctx, path):
-        self._left = self._left.resolve(ctx, path)
-        self._right = self._right.resolve(ctx, path)
+        self._left = self._subs.left.resolve(ctx, path + ['(left)'])
+        self._right = self._subs.right.resolve(ctx, path + ['(left)'])
         self._final = self._left._final and self._right._final
         
         type_func_name = f'_{self._op.__name__.rstrip("_")}_type'
@@ -950,12 +1002,12 @@ class ExprOp(DatamijnObject):
         return self._op(left, right)
 
 class ExprAttr(DatamijnObject):
-    _namestring = "{self._left.__name__}.{self._name}"
-    #_left
+    _namestring = "{self._subs.left.__name__}.{self._name}"
+    _subs = Subs('left')
     #_name
     @classmethod
     def resolve(self, ctx, path):
-        self._left = self._left.resolve(ctx, path)
+        self._left = self._subs.left.resolve(ctx, path)
         if not issubclass(self._left.infer_type(), Struct):
             raise ResolveError(path, f"Only structs may be attributed, not {full_type_name(self._left.infer_type())}.")
         
@@ -969,12 +1021,11 @@ class ExprAttr(DatamijnObject):
         return left[self._name]
 
 class ExprIndex(DatamijnObject):
-    #_left
-    #_index
+    _subs = Subs('left', 'index')
     @classmethod
     def resolve(self, ctx, path):
-        self._left = self._left.resolve(ctx, path)
-        self._index = self._index.resolve(ctx, path)
+        self._left = self._subs.left.resolve(ctx, path)
+        self._index = self._subs.index.resolve(ctx, path)
         if not issubclass(self._left.infer_type(), Array):
             raise ResolveError(path, f"Only arrays may be indexed, not {full_type_name(self._left.infer_type())}.")
         if not issubclass(self._index.infer_type(), int):
@@ -992,11 +1043,11 @@ class ExprIndex(DatamijnObject):
         return left[index]
 
 class Return(DatamijnObject):
-    #_expr
+    _subs = Subs('expr')
     
     @classmethod
     def resolve(self, ctx, path):
-        self._expr = self._expr.resolve(ctx, path)
+        self._expr = self._subs.expr.resolve(ctx, path)
         self._yields = self._expr._yields
         self._final_type = self._expr.infer_type()
         self._final = self._expr._final
@@ -1031,18 +1082,17 @@ class RightSize(DatamijnObject):
                 return x['_right_size']
 
 class Pointer(DatamijnObject):
-    _namestring = "@{self._addr.__name__} {self._type.__name__}"
-    #_type
-    #_addr
+    _namestring = "@{self._subs.addr.__name__} {self._subs.type.__name__}"
+    _subs = Subs('type', 'addr')
     
     @classmethod
     def resolve(self, ctx, path):
-        self._type = self._type.resolve(ctx, path)
-        self._addr = self._addr.resolve(ctx, path + ["(addr)"])
+        self._addr = self._subs.addr.resolve(ctx, path + ["(addr)"])
         if not issubclass(self._addr.infer_type(), int):
             raise ResolveError(path, f"Pointer address must resolve to int.\n{self._addr.__name__} resolves to {full_type_name(self._addr.infer_type())}.\nHINT: This could be a syntax ambiguity.  If you intend to index or attribute in your address expression, make sure to put it in parenthesis!")
+        self._type = self._subs.type.resolve(ctx, path)
         
-        newtype = self.make(None, [self._type.infer_type()], _addr=self._addr, _type=self._type)
+        newtype = self.make(bases=[self._type.infer_type()], _addr=self._addr, _type=self._type, addr=self._subs.addr, type=self._subs.type)
         
         #newtype._final_type = self._type.infer_type()
         newtype._final_type = newtype
@@ -1139,10 +1189,11 @@ class MatchTypeMetaclass(type):
             raise AttributeError()
 
 class MatchType(DatamijnObject, metaclass=MatchTypeMetaclass):
+    _subs = Subs('type')
     _concat_result = False
     @classmethod
     def resolve(self, ctx, path):
-        self._type = self._type.resolve(ctx, path)
+        self._type = self._subs.type.resolve(ctx, path)
         self._yields = self._type._yields
         self._final_type = None
         
@@ -1308,20 +1359,19 @@ class PipeStream(IOWithBits):
         return (f"<{'.'.join(str(x) for x in self._path)} PipeStream>")
 
 class Pipe(DatamijnObject):
-    _namestring = "{self._left_type.__name__}|{self._right_type.__name__}"
-    # _left_type
-    # _right_type
+    _namestring = "{self._subs.left.__name__}|{self._subs.right.__name__}"
+    _subs = Subs('left', 'right')
     @classmethod
     def resolve(self, ctx, path):
-        self._left_type = self._left_type.resolve(ctx, path + ["(left)"])
-        self._right_type = self._right_type.resolve(ctx, path + ["(right)"])
+        self._left_type = self._subs.left.resolve(ctx, path + ["(left)"])
+        self._right_type = self._subs.right.resolve(ctx, path + ["(right)"])
         if not self._left_type._yields \
           and not issubclass(self._left_type.infer_type(), ByteString) \
           and hasattr(self._left_type.infer_type(), "__or__"):
           #and not (issubclass(self._right_type, PipedDatamijnObject) \
           #  and not issubclass(self._right_type, Pipe)):
             expr = ExprOp.make(f"({self._left_type.__name__}|{self._right_type.__name__})",
-                _left=self._left_type, _right=self._right_type, _op=operator.or_)
+                left=self._left_type, right=self._right_type, _op=operator.or_)
             return expr.resolve(ctx, path)
         
         self._yields = self._left_type._yields or self._right_type._yields
@@ -1354,28 +1404,27 @@ class Pipe(DatamijnObject):
             return result
 
 class Inheritance(DatamijnObject):
-    _namestring = "{self._left_type.__name__} {self._right_type.__name__}"
-    # _left_type
-    # _right_type
+    _namestring = "{self._subs.left.__name__} {self._subs.right.__name__}"
+    _subs = Subs('left', 'right')
     @classmethod
     def resolve(self, ctx, path):
-        if not issubclass(self._left_type, Struct):
+        if not issubclass(self._subs.left, Struct):
             raise ResolveError(path, f"""Can only apply inheritance to Structs
 Attempted to inherit {self._left_type.__name__} from {self._right_type.__name__}""")
         
-        newtype = self._left_type.make(None, bases=[self._right_type]).resolve(ctx, path)
+        newtype = self._subs.left.make(None, bases=[self._subs.right]).resolve(ctx, path)
         
-        for field in self._right_type._inherited_fields:
+        for field in self._subs.right._inherited_fields:
             if field not in newtype._contents:
                 raise ResolveError(path, f"""Inherited Struct must have the necessary inherited fields
-`{self._left_type.__name__}` is mising the field `{field}`
-`{self._right_type.__name__}` needs the following fields: {', '.join(self._right_type._inherited_fields)}""")
+`{self._subs.left.__name__}` is mising the field `{field}`
+`{self._subs.right.__name__}` needs the following fields: {', '.join(self._subs.right._inherited_fields)}""")
         
         return newtype
         
 
 class ForeignKey(DatamijnObject):
-    # _type
+    _subs = Subs('type')
     # field_name
     def __init__(self, key, ctx):
         self._key = key
@@ -1383,7 +1432,7 @@ class ForeignKey(DatamijnObject):
     
     @classmethod
     def resolve(self, ctx, path):
-        self._type = self._type.resolve(ctx, path)
+        self._type = self._subs.type.resolve(ctx, path)
         self._yields = self._type._yields
         
         if not isinstance(self._field_name, tuple):
@@ -1459,6 +1508,7 @@ class KeyRange():
         else:
             return NotImplemented
 
+# TODO broken
 class If(DatamijnObject):
     # _expr
     # _true_struct

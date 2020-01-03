@@ -48,6 +48,8 @@ class DatamijnPathError(DatamijnError):
     
         super().__init__(message)
 
+class MakeError(DatamijnError): pass
+
 class ResolveError(DatamijnPathError): pass
 
 class ParseError(DatamijnPathError): pass
