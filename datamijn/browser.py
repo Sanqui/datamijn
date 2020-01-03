@@ -3,7 +3,7 @@
 import urwid
 import math
 from datamijn.dmtypes import Struct, Array, String, ForeignKey, ForeignKeyError
-from datamijn.gfx import RGBColor, Palette, Tile
+from datamijn.gfx import RGBColor, Palette, Tile, Image
 from datamijn.utils import full_type_name
 
 def text_from_color(value, space=True):
@@ -306,6 +306,19 @@ class DatamijnBrowser():
                 text += [('error', 'Substructure has error\n')]
             else:
                 text += ["\n"]
+        
+        if isinstance(obj, Image):
+            palette = obj._palette
+            tilewidth = obj._child_type._child_type.width
+            width = tilewidth*len(obj[0])
+            height = obj._child_type._child_type.height*len(obj)
+            for y in range(height):
+                text += [('body', ' ')]
+                for x in range(width):
+                    #value = obj[y//8][tilex].tile[(y%8) * 8 + tilewidth]
+                    value = obj[y//8][x//8].tile[(y%8) * 8 + (x % 8)]
+                    text += [text_from_color(palette[value], space=False)]
+                text += [('body', '\n')]
         
         if not broken_obj and self.file and hasattr(obj, "_address") and obj._address != None and not isinstance(obj, Exception):
             childs_at = {}
