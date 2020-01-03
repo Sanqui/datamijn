@@ -398,7 +398,7 @@ class Array(DatamijnObject):
             for elem_type in elem_types:
                 if hasattr(cur_type.infer_type(), "_parsetype") \
                   and issubclass(cur_type.infer_type()._parsetype.infer_type(), elem_type):
-                    cur_type = cur_type._parsetype
+                    cur_type = cur_type.infer_type()._parsetype
                     new_array_type = new_class
                 else:
                     new_array_type = None
