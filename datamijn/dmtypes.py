@@ -1,6 +1,7 @@
 import operator
 from io import BytesIO, BufferedIOBase
 from datamijn.utils import UPPERCASE, full_type_name, ResolveError, ParseError, ForeignKeyError, ReadError, SaveNotImplementedError, MakeError
+from datamijn.traceint import TraceInt
 
 class IOWithBits(BufferedIOBase):
     def __init__(self, *args, **kvargs):
@@ -273,36 +274,8 @@ class Word(DatamijnObject, bytes):
             raise ParseError(path, "Failed to read stream")
         return read
 
-def run_on_super_and_copy_attributes(function, self, other):
-    res = getattr(int(self), function)(other)
-    if res == NotImplemented:
-        return NotImplemented
-    newobj = DatamijnInt.__new__(DatamijnInt, res)
-    pass_from = None
-    if hasattr(self, '_address'):
-        pass_from = self
-    elif hasattr(other, '_address'):
-        pass_from = other
-    
-    if not self._size and hasattr(other, '_address') and other._size:
-        pass_from = other
-    # TODO pass both (_ingredients)
-    
-    if pass_from:
-        for attr in '_path _size _address _pointer'.split():
-            if hasattr(pass_from, attr):
-                setattr(newobj, attr, getattr(pass_from, attr))        
-    return newobj
-
-class DatamijnInt(DatamijnObject, int):
+class DatamijnInt(DatamijnObject, TraceInt):
     _root_name = "DatamijnInt"
-    
-    # This is necessary to properly propagate a subclassed int in Python.
-    __add__ = lambda self, other: run_on_super_and_copy_attributes('__add__', self, other)
-    __sub__ = lambda self, other: run_on_super_and_copy_attributes('__sub__', self, other)
-    __mul__ = lambda self, other: run_on_super_and_copy_attributes('__mul__', self, other)
-    __floordiv__ = lambda self, other: run_on_super_and_copy_attributes('__floordiv__', self, other)
-    __mod__ = lambda self, other: run_on_super_and_copy_attributes('__mod__', self, other)
     
     def __repr__(self):
         #return f"{self.__class__.__name__}({int(self)})"
