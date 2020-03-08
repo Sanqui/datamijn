@@ -23,9 +23,9 @@ def test_basic_type(type, data, value):
     dm = f"value {type}"
     result = datamijn.parse(dm, data)
     assert result.value == value
-    #assert result.value._data.data == data
-    assert result.value._address == 0
-    assert result.value._size == len(data)
+    assert result.value._trace.param == data[::-1]
+    assert result.value._trace.param._address == 0
+    assert result.value._trace.param._size == len(data)
 
 def test_typedef():
     dm = """
@@ -35,13 +35,13 @@ position  {
 }"""
     result = datamijn.parse(dm, b('1020'))
     assert result.position.x == 0x10
-    #assert result.position.x._data.data == b('10')
-    assert result.position.x._address == 0x0
-    assert result.position.x._size == 0x1
+    assert result.position.x._trace.param == b('10')
+    assert result.position.x._trace.param._address == 0x0
+    assert result.position.x._trace.param._size == 0x1
     assert result.position.y == 0x20
-    #assert result.position.y._data.data == b('20')
-    assert result.position.y._address == 0x1
-    assert result.position.y._size == 0x1
+    assert result.position.y._trace.param == b('20')
+    assert result.position.y._trace.param._address == 0x1
+    assert result.position.y._trace.param._size == 0x1
     
     keys = ['x', 'y']
     for key, real_key in zip(result.position, ['x', 'y']):
@@ -877,6 +877,14 @@ dummy_array  [4] {
     result = datamijn.parse(dm, b"")
     for i in range(4):
         assert result.dummy_array[i].index == i
+
+def test_traceint():
+    dm = """
+x   U8 + 1
+"""
+    result = datamijn.parse(dm, b("05"))
+    assert result.x == 6
+    assert result.x._trace.params[0] == 5 
 
 def test_underscore_name():
     dm = """

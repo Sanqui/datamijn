@@ -8,12 +8,14 @@
     }
 }
 
-:BytePlusOne {
-    _byte        U8
-    _one         1
-    
-    = _byte + _one
-}
+//:BytePlusOne {
+//    _byte        U8
+//    _one         1
+//    
+//    = _byte + _one
+//}
+
+:BytePlusOne U8 + 1
 
 :ItemCategory   U8 match {
     0   => :None

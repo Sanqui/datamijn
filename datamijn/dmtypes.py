@@ -1,7 +1,7 @@
 import operator
 from io import BytesIO, BufferedIOBase
 from datamijn.utils import UPPERCASE, full_type_name, ResolveError, ParseError, ForeignKeyError, ReadError, SaveNotImplementedError, MakeError
-from datamijn.traceint import TraceInt
+from datamijn.traceint import TraceInt, Source
 
 class IOWithBits(BufferedIOBase):
     def __init__(self, *args, **kvargs):
@@ -151,12 +151,15 @@ class DatamijnObject():
             else:
                 raise type(ex)(f'{ex}\nPath: {".".join(str(x) for x in path)}')
         else:
-            obj = self.__new__(self, value)
-            obj.__init__(value)
+            if not isinstance(value, self):
+                obj = self.__new__(self, value)
+                obj.__init__(value)
+            else:
+                obj = value
         
         if rich:
-            obj._address = address
-            obj._size = length
+            #obj._address = address
+            #obj._size = length
             obj._path = path
             obj._error = isinstance(obj, Exception)
             
@@ -246,10 +249,14 @@ class Byte(DatamijnObject, bytes):
     _size = 1
     @classmethod
     def _parse_stream(self, stream, ctx, path, index=None, **kwargs):
+        address = stream.tell()
         read = stream.read(1)
         if len(read) != self._size:
             raise ParseError(path, "Failed to read stream")
-        return read
+        byte = self(read)
+        byte._address = address
+        byte._size = self._size
+        return byte
     
     @classmethod
     def _mul_type(self, other):
@@ -260,22 +267,30 @@ class Short(DatamijnObject, bytes):
     _size = 2
     @classmethod
     def _parse_stream(self, stream, ctx, path, index=None, **kwargs):
+        address = stream.tell()
         read = stream.read(2)[::-1]
         if len(read) != self._size:
             raise ParseError(path, "Failed to read stream")
-        return read
+        short = self(read)
+        short._address = address
+        short._size = self._size
+        return short
 
 class Word(DatamijnObject, bytes):
     _size = 4
     @classmethod
     def _parse_stream(self, stream, ctx, path, index=None, **kwargs):
+        # FIXME
         read = stream.read(4)[::-1]
         if len(read) != self._size:
             raise ParseError(path, "Failed to read stream")
-        return read
+        return self(read)
 
 class DatamijnInt(DatamijnObject, TraceInt):
     _root_name = "DatamijnInt"
+
+    #def __add__(self, other):
+    #    raise "ADD CALLED"
     
     def __repr__(self):
         #return f"{self.__class__.__name__}({int(self)})"
@@ -318,8 +333,9 @@ class U8(DatamijnInt):
     _size = 1
     @classmethod
     def _parse_stream(self, stream, ctx, path, index=None, **kwargs):
-        data = stream.read(1)
-        value = ord(data)
+        data = Byte().parse_stream(stream, ctx, path, **kwargs)
+        value = self(ord(data))
+        value._trace = Source(self, data)
         return value
 
 class U16(DatamijnInt):
@@ -327,8 +343,9 @@ class U16(DatamijnInt):
     _size = 2
     @classmethod
     def _parse_stream(self, stream, ctx, path, index=None, **kwargs):
-        data = stream.read(2)
-        value = data[0] | (data[1] << 8)
+        data = Short().parse_stream(stream, ctx, path, **kwargs)
+        value = self(data[1] | (data[0] << 8))
+        value._trace = Source(self, data)
         return value
 
 class U32(DatamijnInt):
@@ -1259,9 +1276,10 @@ class MatchType(DatamijnObject, metaclass=MatchTypeMetaclass):
                     ctx_extra = {str(self._default_key): value}
                 # XXX this makes sense e.g. for pokered.type_effectiveness
                 obj = self._match[self._default_key].parse_stream(stream, ctx + [ctx_extra], path + [f"[_]"], **kwargs)
-                if obj != None and obj._size != None and value._size != None:
-                    obj._address = value._address
-                    obj._size += value._size
+                # FIXME
+                #if obj != None and obj._size != None and value._size != None:
+                #    obj._address = value._address
+                #    obj._size += value._size
                 return obj
             else:
                 # XXX improve this error

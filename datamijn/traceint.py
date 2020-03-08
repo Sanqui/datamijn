@@ -4,6 +4,8 @@ class Source():
     def __init__(self, function, *params):
         self.function = function
         self.params = params
+        if len(params) == 1:
+            self.param = params[0]
     
     def __str__(self):
         return f"{self.function.__name__} " + " ".join(str(x) for x in self.params)
@@ -23,7 +25,7 @@ def make_method(int_func):
         
         newobj = type(self).__new__(type(self), result)
 
-        newobj._source = Source(int_func, self, other)
+        newobj._trace = Source(int_func, self, other)
 
         return newobj
         
@@ -39,13 +41,13 @@ for operation in OPERATIONS:
 def test():
     x = TraceInt(5) + TraceInt(10)
     assert x == 15
-    assert x._source.params[0] == 5
-    assert x._source.params[1] == 10
+    assert x._trace.params[0] == 5
+    assert x._trace.params[1] == 10
 
     y = x * TraceInt(2)
     assert y == 30
-    assert y._source.params[0] == 15
-    assert y._source.params[0]._source.params[0] == 5
+    assert y._trace.params[0] == 15
+    assert y._trace.params[0]._trace.params[0] == 5
 
     return True
 
