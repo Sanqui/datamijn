@@ -322,20 +322,19 @@ class DatamijnBrowser():
                     text += [text_from_color(palette[value], space=False)]
                 text += [('body', '\n')]
         
-        text.append(('name', f'{x}\n'))
-        if not broken_obj and self.file and ((hasattr(obj, "_address") and obj._address != None) or hasattr(obj, '_trace')) and not isinstance(obj, Exception):
+        if not broken_obj and self.file and ((hasattr(obj, "_address") and obj._address != None) or hasattr(obj, '_trace') or hasattr(obj, '_key')) and not isinstance(obj, Exception):
             childs_at = {}
         
-            def get_childs_from(obj, name):
+            def get_childs_from(obj, name, type=''):
                 if hasattr(obj, '_trace'):
                     for param in obj._trace.params:
                         get_childs_from(param, f"{name} *")
                 if hasattr(obj, '_address'):
-                    childs_at[obj._address] = HexViewerChild(obj._address, obj._size, name)
+                    childs_at[obj._address] = HexViewerChild(obj._address, obj._size, name, type=type)
                 if hasattr(obj, '_pointer') and hasattr(obj._pointer, '_address'):
                     childs_at[obj._pointer._address] = HexViewerChild(obj._pointer._address, obj._pointer._size, f"{name} ptr", type="pointer")
-                if hasattr(obj, '_key') and hasattr(obj._key, '_address'):
-                    childs_at[obj._key._address] = HexViewerChild(obj._key._address, obj._key._size, f"{name} key", type="key")
+                if hasattr(obj, '_key'):
+                    get_childs_from(obj._key, f"{name} key", type="key")
         
             if isinstance(obj, ForeignKey):
                 obj = obj._object
@@ -351,13 +350,18 @@ class DatamijnBrowser():
             obj2 = obj
             while hasattr(obj2, '_trace'):
                 obj2 = obj2._trace.params[0]
-
-            if self.align_width:
-                address = obj2._address
+            
+            # hotfix
+            if not hasattr(obj2, '_address'):
+                address = 0
                 address += self.scroll_hex
             else:
-                address = max(obj2._address - (obj2._address % 0x10) - 0x10, 0)
-                address += self.scroll_hex*0x10
+                if self.align_width:
+                    address = obj2._address
+                    address += self.scroll_hex
+                else:
+                    address = max(obj2._address - (obj2._address % 0x10) - 0x10, 0)
+                    address += self.scroll_hex*0x10
             if address < 0:
                 address = 0
             last_child = None
