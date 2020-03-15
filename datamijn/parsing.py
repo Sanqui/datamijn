@@ -193,7 +193,7 @@ Attempted to inherit {left_type.__name__} from {name}""")
         return type_.make(_int=num)
     
     def expr_string(self, token):
-        string = str(token[0])
+        string = token[0]
         return ExprString.make(string, _string=string)
     
     def expr_struct(self, f):

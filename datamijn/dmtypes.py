@@ -357,6 +357,16 @@ class U32(DatamijnInt):
         value = data[0] | (data[1] << 8) | (data[2] << 16) | (data[3] << 24)
         return value
 
+class DatamijnString(DatamijnObject, str):
+    _root_name = "DatamijnString"
+
+    def __add__(self, other):
+        new = DatamijnString(str(self) + str(other))
+
+        new._trace = Source(self.__add__, self, other)
+
+        return new
+
 class Array(DatamijnObject):
     _subs = Subs('parsetype', 'length')
     # _child_type
@@ -468,6 +478,9 @@ class Array(DatamijnObject):
             #    raise ValueError("Improper terminating condition")
         
         size = stream.tell() - start_address
+
+        #if contents and hasattr(contents[0], '_address'):
+        #    start_address = contents[0]._address
         
         if self._bytestring or len(contents) and isinstance(contents[0], bytes):
             return b"".join(contents)
@@ -849,7 +862,7 @@ class Call(DatamijnObject):
     @classmethod
     def parse_stream(self, stream, ctx, path, index=None, **kwargs):
         ctx.append(dict(zip(self._func._arguments, self._resolved_arguments)))
-        result = self._expr.parse_stream(stream, ctx, path + ["()"])
+        result = self._expr.parse_stream(stream, ctx, path + ["()"], index=index)
         ctx.pop()
         return result
 
@@ -941,7 +954,7 @@ class ExprString(DatamijnObject):
 
     @classmethod
     def parse_stream(self, stream, ctx, path, index=None, **kwargs):
-        return self._string
+        return DatamijnString(self._string)
 
 class ExprOp(DatamijnObject):
     _subs = Subs('left', 'right')
@@ -1264,11 +1277,16 @@ class MatchType(DatamijnObject, metaclass=MatchTypeMetaclass):
             key_value = int(key_value)
         
         if key_value in self._match:
-            return self._match[key_value].parse_stream(stream, ctx, path + [f"[{value}]"], **kwargs)
+            obj = self._match[key_value].parse_stream(stream, ctx, path + [f"[{value}]"], **kwargs)
+            if isinstance(obj, DatamijnObject):
+                obj._match_value = value
+            return obj
         else:
             for range, rangeval in self._ranges.items():
                 if range.from_ <= key_value < range.to:
-                    return rangeval.parse_stream(stream, ctx, path + [f"[{range}]"], **kwargs)
+                    obj = rangeval.parse_stream(stream, ctx, path + [f"[{range}]"], **kwargs)
+                    obj._match_value = value
+                    return obj
             
             if self._default_key != None:
                 ctx_extra = {}
@@ -1280,6 +1298,7 @@ class MatchType(DatamijnObject, metaclass=MatchTypeMetaclass):
                 #if obj != None and obj._size != None and value._size != None:
                 #    obj._address = value._address
                 #    obj._size += value._size
+                obj._match_value = value
                 return obj
             else:
                 # XXX improve this error

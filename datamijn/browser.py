@@ -165,12 +165,13 @@ class DatamijnBrowserParentNode(urwid.ParentNode):
         return obj
 
 class HexViewerChild():
-    def __init__(self, address, size, name=None, type=None):
+    def __init__(self, address, size, name=None, type=None, nested=False):
         self.address = address
         self.size = size or 0
         self.end_address = self.address + self.size
         self.name = str(name) if name != None else None
         self.type = type
+        self.nested = nested
 
 class DatamijnBrowser():
     palette = [
@@ -322,46 +323,63 @@ class DatamijnBrowser():
                     text += [text_from_color(palette[value], space=False)]
                 text += [('body', '\n')]
         
-        if not broken_obj and self.file and ((hasattr(obj, "_address") and obj._address != None) or hasattr(obj, '_trace') or hasattr(obj, '_key')) and not isinstance(obj, Exception):
+        if not broken_obj and self.file and ((hasattr(obj, "_address") and obj._address != None) or hasattr(obj, '_trace') or hasattr(obj, '_key') or isinstance(obj, Array)) and not isinstance(obj, Exception):
             childs_at = {}
         
-            def get_childs_from(obj, name, type=''):
+            def get_childs_from(obj, name, type='', nested=0):
+                if isinstance(obj, Array) and not nested:
+                    for i, child in enumerate(obj):
+                        get_childs_from(child, f"{name} {i}".strip(), nested=nested+1)
+                else:
+                    if hasattr(obj, '_address'):
+                        if not (nested and obj._address in childs_at):
+                            childs_at[obj._address] = HexViewerChild(obj._address, obj._size, name, type=type, nested=nested+1)
                 if hasattr(obj, '_trace'):
                     for param in obj._trace.params:
-                        get_childs_from(param, f"{name} *")
-                if hasattr(obj, '_address'):
-                    childs_at[obj._address] = HexViewerChild(obj._address, obj._size, name, type=type)
+                        if len(obj._trace.params) > 1:
+                            if name.endswith('⁻ⁿ'):
+                                child_name = name
+                            elif name.endswith('⁻¹'):
+                                child_name = f"{name[:-2]}⁻ⁿ"
+                            else:
+                                child_name = f"{name}⁻¹"
+                        else:
+                            child_name = name
+                        get_childs_from(param, child_name, type=type, nested=nested+1)
                 if hasattr(obj, '_pointer') and hasattr(obj._pointer, '_address'):
-                    childs_at[obj._pointer._address] = HexViewerChild(obj._pointer._address, obj._pointer._size, f"{name} ptr", type="pointer")
+                    if not (nested and obj._pointer._address in childs_at):
+                        childs_at[obj._pointer._address] = HexViewerChild(obj._pointer._address, obj._pointer._size, f"{name} @", type="pointer", nested=nested+1)
                 if hasattr(obj, '_key'):
-                    get_childs_from(obj._key, f"{name} key", type="key")
+                    get_childs_from(obj._key, f"{name} ->", type="key")
+                if hasattr(obj, '_match_value'):
+                    get_childs_from(obj._match_value, f"{name} &", type="key")
         
             if isinstance(obj, ForeignKey):
                 obj = obj._object
-            if isinstance(obj, Array) and not isinstance(obj, String):
-                for i, child in enumerate(obj):
-                    get_childs_from(child, i)
             elif isinstance(obj, Struct):
                 for name, child in obj.items():
                     get_childs_from(child, name)
             else:
-                get_childs_from(obj, None)
+                get_childs_from(obj, '')
             
             obj2 = obj
             while hasattr(obj2, '_trace'):
                 obj2 = obj2._trace.params[0]
             
             # hotfix
-            if not hasattr(obj2, '_address'):
-                address = 0
+            if hasattr(obj2, '_address'):
+                start_address = obj2._address
+            elif childs_at:
+                start_address = min(childs_at)
+            else:
+                start_address = 0
+            
+            if self.align_width:
+                address = start_address
                 address += self.scroll_hex
             else:
-                if self.align_width:
-                    address = obj2._address
-                    address += self.scroll_hex
-                else:
-                    address = max(obj2._address - (obj2._address % 0x10) - 0x10, 0)
-                    address += self.scroll_hex*0x10
+                address = max(start_address - (start_address % 0x10) - 0x10, 0)
+                address += self.scroll_hex*0x10
             if address < 0:
                 address = 0
             last_child = None
@@ -392,7 +410,7 @@ class DatamijnBrowser():
                             cur_child = None
                             if self.align_width and last_child.size % 16 != 0:
                                 break
-                        if address in childs_at:
+                        if address in childs_at and (not cur_child or cur_child.nested <= childs_at[address].nested):
                             last_child = cur_child
                             cur_child = childs_at[address]
                             if self.explain and cur_child.name:
