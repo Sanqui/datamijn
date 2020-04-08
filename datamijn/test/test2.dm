@@ -43,6 +43,7 @@ struct          {
 struct.x        U8
 
 some_array  [10] {
+    num     I
 }
 
 some_array[].x  [10]U8

@@ -764,7 +764,12 @@ class Struct(dict, DatamijnObject):
     
     def __repr__(self):
         name = type(self).__name__
-        return f"<{name}>"
+        if hasattr(self, 'num'):
+            return f"<{name} num {self.num}>"
+        elif hasattr(self, 'id'):
+            return f"<{name} id {self.id}>"
+        else:
+            return f"<{name}>"
     
     def _pretty_repr(self):
         name = type(self).__name__
