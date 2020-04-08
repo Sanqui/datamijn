@@ -1303,7 +1303,8 @@ class MatchType(DatamijnObject, metaclass=MatchTypeMetaclass):
                 #if obj != None and obj._size != None and value._size != None:
                 #    obj._address = value._address
                 #    obj._size += value._size
-                obj._match_value = value
+                if isinstance(obj, DatamijnObject):
+                    obj._match_value = value
                 return obj
             else:
                 # XXX improve this error
@@ -1499,6 +1500,12 @@ class ForeignKey(DatamijnObject):
     
     def __getitem__(self, item):
         return self._object[item]
+    
+    def __eq__(self, other):
+        if isinstance(other, ForeignKey):
+            return self._object == other._object
+        else:
+            return False
         
     def __repr__(self):
         return f"-> {self._field_name[-1]}({repr(self._key)}, {repr(self._field_name)})"

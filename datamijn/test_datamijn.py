@@ -829,6 +829,19 @@ thing   2 -> things
     assert result.thing.x == 0x20
     assert result.thing.y == 0x21
 
+def test_foreign_key_equality():
+    dm = """
+things      [4]{
+    x   U8
+    y   U8
+}
+
+thing_a   2 -> things
+thing_b   2 -> things
+"""
+    result = datamijn.parse(dm, b("0001 1011 2021 3031"))
+    assert result.thing_a == result.thing_b
+
 def test_foreign_key_error():
     dm = """
 things      [4]{
