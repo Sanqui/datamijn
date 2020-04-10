@@ -363,7 +363,8 @@ class DatamijnString(DatamijnObject, str):
     def __add__(self, other):
         new = DatamijnString(str(self) + str(other))
 
-        new._trace = Source(self.__add__, self, other)
+        # Pointless performance hit atm.
+        #new._trace = Source(self.__add__, self, other)
 
         return new
 
@@ -371,6 +372,7 @@ class Array(DatamijnObject):
     _subs = Subs('parsetype', 'length')
     # _child_type
     # _length
+    _force_array_type = None
     _concat = False
     _bytestring = False
     _final_length = False
@@ -404,6 +406,9 @@ class Array(DatamijnObject):
                     new_array_type = None
             if new_array_type:
                 break
+    
+        if self._force_array_type:
+            new_array_type = self._force_array_type
         
         length_name = ""
         if self._length and isinstance(self._length, int):
@@ -644,13 +649,12 @@ class Struct(dict, DatamijnObject):
         if not ctx: ctx = []
         if not path: path = []
         
-        rich = ctx[0]._rich if len(ctx) else self._rich
-        if rich:
-            start_address = stream.tell()
+        #rich = ctx[0]._rich if len(ctx) else self._rich
+        #if rich:
+        start_address = stream.tell()
         
         error = False
         size = 0
-        size_extra = 0
         obj = self()
         ctx.append(obj)
         obj._ctx = ctx
@@ -661,15 +665,15 @@ class Struct(dict, DatamijnObject):
             result = type_.parse_stream(stream, ctx, passed_path, index=index, **kwargs)
             if hasattr(result, '_error') and result._error:
                 error = True
-            if rich:
-                result_size = stream.tell() - address
-                size += result_size
-                if hasattr(result, '_size') and result._size:
-                    size_extra += result._size - result_size
+            
+            result_size = stream.tell() - address
+            size += result_size
+            #if hasattr(result, '_size') and result._size:
+            #    size_extra += result._size - result_size
             if name:
                 obj[name] = result
-            elif isinstance(result, Struct) and result._embed:
-                obj.update(result)
+            #elif isinstance(result, Struct) and result._embed:
+            #    obj.update(result)
         
         if self._return:
             value = self._return.parse_stream(stream, ctx, path + ["_return"], index=index, **kwargs)
@@ -677,40 +681,43 @@ class Struct(dict, DatamijnObject):
             return value
         else:
             ctx.pop()
-            if rich:
-                obj._address = start_address
-                obj._size = size
-                obj._size_extra = size_extra
-                obj._path = path
-                obj._error = error
+
+            obj._address = start_address
+            obj._size = size
+            #obj._size_extra = size_extra
+            obj._path = path
+            obj._error = error
             return obj
     
     def __setitem__(self, key, value):
-        while isinstance(key, tuple) and len(key) == 1:
-            key = key[0]
-        if isinstance(key, tuple):
-            if isinstance(key[0], ForeignListAssignment):
-                key_name = key[0].name
-                is_list = True
-            else:
-                key_name = key[0]
-                is_list = False
-            if key_name not in self:
-                raise NameError(f"`{key_name}` not in context")
-            if is_list:
-                if not isinstance(self[key_name], list):
-                    raise TypeError(f"Attempting foreign list assignment to a non-list `{key_name}`")
-                elif not isinstance(value, list):
-                    raise TypeError(f"Attempting foreign list assignment to `{key_name}` with a non-list")
-                elif len(self[key_name]) != len(value):
-                    raise TypeError(f"Attempting foreign list assignment to `{key_name}` with a list of a different length")
-                else:
-                    for i in range(len(value)):
-                        self[key_name][i][key[1:]] = value[i]
-            else:
-                self[key[0]][key[1:]] = value
-        else:
+        if not isinstance(key, tuple):
             super().__setitem__(key, value)
+        else:
+            while isinstance(key, tuple) and len(key) == 1:
+                key = key[0]
+            if isinstance(key, tuple):
+                if isinstance(key[0], ForeignListAssignment):
+                    key_name = key[0].name
+                    is_list = True
+                else:
+                    key_name = key[0]
+                    is_list = False
+                if key_name not in self:
+                    raise NameError(f"`{key_name}` not in context")
+                if is_list:
+                    if not isinstance(self[key_name], list):
+                        raise TypeError(f"Attempting foreign list assignment to a non-list `{key_name}`")
+                    elif not isinstance(value, list):
+                        raise TypeError(f"Attempting foreign list assignment to `{key_name}` with a non-list")
+                    elif len(self[key_name]) != len(value):
+                        raise TypeError(f"Attempting foreign list assignment to `{key_name}` with a list of a different length")
+                    else:
+                        for i in range(len(value)):
+                            self[key_name][i][key[1:]] = value[i]
+                else:
+                    self[key[0]][key[1:]] = value
+            else:
+                super().__setitem__(key, value)
     
     def __getattr__(self, name):
         if name in self:
@@ -942,8 +949,8 @@ class ExprInt(DatamijnInt):
     #_int
     
     @classmethod
-    def _parse_stream(self, stream, ctx, path, index=None, **kwargs):
-        return self._int
+    def parse_stream(self, stream, ctx, path, index=None, **kwargs):
+        return DatamijnInt(self._int)
 
 
 class ExprHex(ExprInt, HexDatamijnObject):
@@ -1285,8 +1292,9 @@ class MatchType(DatamijnObject, metaclass=MatchTypeMetaclass):
             key_value = int(key_value)
         
         if key_value in self._match:
-            obj = self._match[key_value].parse_stream(stream, ctx, path + [f"[{value}]"], **kwargs)
-            if isinstance(obj, DatamijnObject):
+            obj = self._match[key_value].parse_stream(stream, ctx, path + [f"[{key_value}]"], **kwargs)
+            #if isinstance(obj, DatamijnObject):
+            if obj != None:
                 obj._match_value = value
             return obj
         else:
@@ -1429,8 +1437,8 @@ class Inheritance(DatamijnObject):
     def resolve(self, ctx, path):
         if issubclass(self._subs.left, Array) and self._subs.right == String:
             newtype = self._subs.left.make()
+            newtype._force_array_type = self._subs.right
             newtype = newtype.resolve(ctx, path)
-            newtype._concat = True
             return newtype
         
         if not issubclass(self._subs.left, Struct):

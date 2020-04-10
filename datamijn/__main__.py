@@ -2,7 +2,7 @@ import click
 
 from datamijn.parsing import parse_definition, parse
 
-DATAMIJN_OUTPUTS = ["pretty_repr", "repl", "ipython", "browser"]
+DATAMIJN_OUTPUTS = ["pretty_repr", "repl", "ipython", "browser", "profiler"]
 
 @click.command('datamijn')
 @click.argument('struct-filename', type=click.Path(exists=True))
@@ -13,6 +13,12 @@ DATAMIJN_OUTPUTS = ["pretty_repr", "repl", "ipython", "browser"]
 def cli(struct_filename, binary_filename, output, show_private, lenient):
     struct_file = open(struct_filename, 'r')
     binary_file = open(binary_filename, 'rb')
+    if output == "profiler":
+        from profiling.tracing import TracingProfiler
+        profiler = TracingProfiler()
+        print("Profiling...")
+        profiler.start()
+    
     result = parse(struct_file, binary_file, lenient=lenient)
 
     if output == "pretty_repr":
@@ -29,6 +35,8 @@ def cli(struct_filename, binary_filename, output, show_private, lenient):
         print("The result of the parse is available under `result`.")
         import IPython
         IPython.embed()
+    elif output == 'profiler':
+        profiler.run_viewer()
     else:
         print(f"Unknown output mode {output_mode}")
 
