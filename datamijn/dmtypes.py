@@ -1427,9 +1427,15 @@ class Inheritance(DatamijnObject):
     _subs = Subs('left', 'right')
     @classmethod
     def resolve(self, ctx, path):
+        if issubclass(self._subs.left, Array) and self._subs.right == String:
+            newtype = self._subs.left.make()
+            newtype = newtype.resolve(ctx, path)
+            newtype._concat = True
+            return newtype
+        
         if not issubclass(self._subs.left, Struct):
-            raise ResolveError(path, f"""Can only apply inheritance to Structs
-Attempted to inherit {self._left_type.__name__} from {self._right_type.__name__}""")
+            raise ResolveError(path, f"""Can only apply inheritance to Structs or from String to Array
+Attempted to inherit {self._subs.left.__name__} from {self._subs.right.__name__}""")
         
         newtype = self._subs.left.make(None, bases=[self._subs.right]).resolve(ctx, path)
         

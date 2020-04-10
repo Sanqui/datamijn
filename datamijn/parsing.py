@@ -40,6 +40,7 @@ primitive_types = {
     "Terminator": Terminator,
     "Null": Null,
     "RGBColor": RGBColor,
+    "String": String
 }
 
 for i in range(2, 33):
