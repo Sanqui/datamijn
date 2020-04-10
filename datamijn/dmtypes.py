@@ -1122,11 +1122,14 @@ class Pointer(DatamijnObject):
         # XXX handle the bit stuff elsewhere?
         pos = stream.tell()
         pos_bit = stream._bit_number
+        stream_byte = stream._byte
         stream.seek(address)
         stream._bit_number = 0
+        stream._byte = None
         result = self._type.parse_stream(stream, ctx, path, **kwargs)
         stream.seek(pos)
         stream._bit_number = pos_bit
+        stream._byte = stream_byte
         
         #obj = self.__new__(self, result)
         #obj.__init__(result)

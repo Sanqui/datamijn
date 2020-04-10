@@ -447,6 +447,16 @@ following_byte  U8
     assert result.bits.rest == 0
     assert result.following_byte == 0x44
 
+def test_bit_pointer_realign():
+    dm = """
+five_bits   @0   B5
+byte             U8
+    """
+    result = datamijn.parse(dm, b("01"))
+    assert result.five_bits == 1
+    assert result.byte == 1
+
+
 def test_bit_type():
     dm = """
 :Bits   [8]B1
