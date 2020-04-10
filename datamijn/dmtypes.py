@@ -645,7 +645,7 @@ class Struct(dict, DatamijnObject):
     #    return size
     
     @classmethod
-    def parse_stream(self, stream, ctx=None, path=None, index=None, **kwargs):
+    def parse_stream(self, stream, ctx=None, path=None, index=None, lenient=False, **kwargs):
         if not ctx: ctx = []
         if not path: path = []
         
@@ -659,19 +659,19 @@ class Struct(dict, DatamijnObject):
         ctx.append(obj)
         obj._ctx = ctx
         for name, type_ in self._contents.items():
-            passed_path = path[:]
-            passed_path.append(name)
             address = stream.tell()
-            result = type_.parse_stream(stream, ctx, passed_path, index=index, **kwargs)
-            if hasattr(result, '_error') and result._error:
+            result = type_.parse_stream(stream, ctx, path + [name], index=index, **kwargs)
+            if lenient and hasattr(result, '_error') and result._error:
                 error = True
             
-            result_size = stream.tell() - address
-            size += result_size
+            if not self._return:
+                result_size = stream.tell() - address
+                size += result_size
             #if hasattr(result, '_size') and result._size:
             #    size_extra += result._size - result_size
             if name:
-                obj[name] = result
+                # faster than going through obj[name]
+                dict.__setitem__(obj, name, result)
             #elif isinstance(result, Struct) and result._embed:
             #    obj.update(result)
         
@@ -1345,8 +1345,7 @@ class PipeStream(IOWithBits):
             else:
                 raise TypeError(f"Attempting to pipe {full_type_name(type_.infer_type())}")
     
-    def read(self, num, strict=True):
-        assert strict == True
+    def read(self, num):
         self._buffer.seek(0, 2) # SEEK_END
         while self._free_bytes < num:
             result = self._type.parse_stream(self._stream, self._ctx, self._path + ["<PipeStream>"], pipebuffer=self._buffer, pipestream=self, strict_read=False) # XXX
