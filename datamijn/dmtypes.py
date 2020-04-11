@@ -132,19 +132,19 @@ class DatamijnObject():
     
     @classmethod
     def parse_stream(self, stream, ctx, path, index=None, lenient=False, **kwargs):
-        rich = ctx[0]._rich
-        if rich:
-            address = stream.tell()
-            try:
-                length = self.size()
-            except NotImplementedError:
-                length = None
-            #data = stream.read(1)
-            #data = Data(data=data, address=address, length=length)
+        #rich = ctx[0]._rich
+        #if rich:
+        #    address = stream.tell()
+        #    try:
+        #        length = self.size()
+        #    except NotImplementedError:
+        #        length = None
+        #    #data = stream.read(1)
+        #    #data = Data(data=data, address=address, length=length)
         
         try:
             value = self._parse_stream(stream, ctx, path, index=index, **kwargs)
-            assert value != None
+            #assert value != None
         except Exception as ex:
             if lenient:
                 obj = ex
@@ -157,11 +157,11 @@ class DatamijnObject():
             else:
                 obj = value
         
-        if rich:
+        #if rich:
             #obj._address = address
             #obj._size = length
-            obj._path = path
-            obj._error = isinstance(obj, Exception)
+        obj._path = path
+        obj._error = lenient and isinstance(obj, Exception)
             
         return obj
     
@@ -198,7 +198,7 @@ class UninitializedSub(DatamijnObject):
     
     @classmethod
     def resolve(self, ctx, path):
-        raise NotImplementedError()
+        raise ResolveError(path, "Internal error: Attempted to resolve an uninitialized sub")
 
 #class PipedDatamijnObject(DatamijnObject):
 #    _pipeable = True
@@ -251,11 +251,11 @@ class Byte(DatamijnObject, bytes):
     def _parse_stream(self, stream, ctx, path, index=None, **kwargs):
         address = stream.tell()
         read = stream.read(1)
-        if len(read) != self._size:
+        if len(read) != 1:
             raise ParseError(path, "Failed to read stream")
         byte = self(read)
         byte._address = address
-        byte._size = self._size
+        byte._size = 1
         return byte
     
     @classmethod
@@ -660,7 +660,7 @@ class Struct(dict, DatamijnObject):
         obj._ctx = ctx
         for name, type_ in self._contents.items():
             address = stream.tell()
-            result = type_.parse_stream(stream, ctx, path + [name], index=index, **kwargs)
+            result = type_.parse_stream(stream, ctx, path + [name], index=index, lenient=lenient, **kwargs)
             if lenient and hasattr(result, '_error') and result._error:
                 error = True
             
@@ -669,14 +669,16 @@ class Struct(dict, DatamijnObject):
                 size += result_size
             #if hasattr(result, '_size') and result._size:
             #    size_extra += result._size - result_size
-            if name:
+            if isinstance(name, str):
                 # faster than going through obj[name]
                 dict.__setitem__(obj, name, result)
+            else:
+                obj[name] = result
             #elif isinstance(result, Struct) and result._embed:
             #    obj.update(result)
         
         if self._return:
-            value = self._return.parse_stream(stream, ctx, path + ["_return"], index=index, **kwargs)
+            value = self._return.parse_stream(stream, ctx, path + ["_return"], index=index, lenient=lenient, **kwargs)
             ctx.pop()
             return value
         else:
