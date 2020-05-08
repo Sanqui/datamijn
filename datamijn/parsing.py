@@ -25,6 +25,7 @@ from datamijn.utils import parse_symfile
 primitive_types = {
     "B1": B1,
     "U8": U8,
+    "S8": S8,
     "U16": U16,
     "U32": U32,
     "Byte": Byte,

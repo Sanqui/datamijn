@@ -338,6 +338,19 @@ class U8(DatamijnInt):
         value._trace = Source(self, data)
         return value
 
+class S8(DatamijnInt):
+    _root_name = "S8"
+    _size = 1
+    @classmethod
+    def _parse_stream(self, stream, ctx, path, index=None, **kwargs):
+        data = Byte().parse_stream(stream, ctx, path, **kwargs)
+        value = ord(data)
+        if value > 127:
+            value = -(256 - value)
+        value = self(value)
+        value._trace = Source(self, data)
+        return value
+
 class U16(DatamijnInt):
     _root_name = "U16"
     _size = 2

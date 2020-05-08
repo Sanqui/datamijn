@@ -27,6 +27,19 @@ def test_basic_type(type, data, value):
     assert result.value._trace.param._address == 0
     assert result.value._trace.param._size == len(data)
 
+def test_signed_type():
+    dm = f"""
+test0  S8
+test1  S8
+test2  S8
+test3  S8
+"""
+    result = datamijn.parse(dm, b("007f80ff"))
+    assert result.test0 == 0
+    assert result.test1 == 127
+    assert result.test2 == -128
+    assert result.test3 == -1
+
 def test_typedef():
     dm = """
 position  {
