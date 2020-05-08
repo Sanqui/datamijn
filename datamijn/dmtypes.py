@@ -1303,7 +1303,8 @@ class MatchType(DatamijnObject, metaclass=MatchTypeMetaclass):
             for range, rangeval in self._ranges.items():
                 if range.from_ <= key_value < range.to:
                     obj = rangeval.parse_stream(stream, ctx, path + [f"[{range}]"], **kwargs)
-                    obj._match_value = value
+                    if obj != None:
+                        obj._match_value = value
                     return obj
             
             if self._default_key != None:
