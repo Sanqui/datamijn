@@ -1,8 +1,9 @@
 import click
 
 from datamijn.parsing import parse_definition, parse
+import json
 
-DATAMIJN_OUTPUTS = ["pretty_repr", "repl", "ipython", "browser", "profiler"]
+DATAMIJN_OUTPUTS = ["pretty_repr", "json", "repl", "ipython", "browser", "profiler"]
 
 @click.command('datamijn')
 @click.argument('struct-filename', type=click.Path(exists=True))
@@ -23,6 +24,8 @@ def cli(struct_filename, binary_filename, output, show_private, lenient):
 
     if output == "pretty_repr":
         print(result._pretty_repr())
+    elif output == "json":
+        print(json.dumps(result._json(), indent=4))
     elif output == "browser":
         binary_file = open(binary_filename, "rb")
         from datamijn.browser import DatamijnBrowser

@@ -5,7 +5,7 @@ import array as pyarray
 import png
 
 from datamijn.dmtypes import DatamijnObject, Array, ListArray
-from datamijn.utils import bits
+from datamijn.utils import bits, JsonType
 
 class Tile(DatamijnObject):
     width = 8
@@ -30,6 +30,9 @@ class Tile(DatamijnObject):
     
     def __repr__(self):
         return f"<{type(self).__name__}>"
+    
+    def _json(self) -> JsonType:
+        return {"_type": "tile", "_class": self.__class__.__name__, "_filename": getattr(self, '_filename', None)}
 
 class PlanarTile(Tile):
     width = 8
@@ -175,6 +178,9 @@ class Tileset(ListArray):
     
     def _pretty_repr(self):
         return repr(self)
+    
+    def _json(self) -> JsonType:
+        return {"_type": "tileset", "_class": self.__class__.__name__, "_filename": getattr(self, '_filename', None)}
 
 class Image(Tileset):
     pass

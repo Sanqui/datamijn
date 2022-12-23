@@ -1,4 +1,7 @@
 
+from typing import Union
+
+
 UPPERCASE = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
 def bits(byte):
@@ -57,3 +60,5 @@ class ParseError(DatamijnPathError): pass
 class ReadError(DatamijnError): pass
 
 class SaveNotImplementedError(DatamijnPathError): pass
+
+JsonType = Union[None, int, str, bool, list, dict]

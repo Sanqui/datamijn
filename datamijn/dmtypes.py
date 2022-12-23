@@ -1,6 +1,7 @@
 import operator
 from io import BytesIO, BufferedIOBase
-from datamijn.utils import UPPERCASE, full_type_name, ResolveError, ParseError, ForeignKeyError, ReadError, SaveNotImplementedError, MakeError
+from typing import Union
+from datamijn.utils import UPPERCASE, full_type_name, ResolveError, ParseError, ForeignKeyError, ReadError, SaveNotImplementedError, MakeError, JsonType
 from datamijn.traceint import TraceInt, Source
 
 class IOWithBits(BufferedIOBase):
@@ -191,6 +192,10 @@ class DatamijnObject():
         pass
         #raise SaveNotImplementedError(path, f"{type(self).__name__} doesn't implement !save")
     
+    def _json(self) -> JsonType:
+        raise NotImplementedError(f"_json() is not implemented for type {self.__class__}")
+
+    
 class UninitializedSub(DatamijnObject):
     @classmethod
     def make(self, name=None, bases=[], **kwargs):
@@ -232,6 +237,9 @@ class Token(DatamijnObject):
             return True
         else:
             return False
+    
+    def _json(self) -> JsonType:
+        return {"_type": "token", "value": self.__class__.__name__}
 
 class Terminator(Token): pass
 
@@ -298,6 +306,9 @@ class DatamijnInt(DatamijnObject, TraceInt):
             return str(int(self))
         else:
             return f"{self.__class__.__name__}({int(self)})"
+    
+    def _json(self) -> JsonType:
+        return int(self)
 
 class HexDatamijnObject(DatamijnInt):
     _root_name = "HexDatamijnObject"
@@ -380,6 +391,9 @@ class DatamijnString(DatamijnObject, str):
         #new._trace = Source(self.__add__, self, other)
 
         return new
+    
+    def _json(self) -> JsonType:
+        return str(self)
 
 class Array(DatamijnObject):
     _subs = Subs('parsetype', 'length')
@@ -556,6 +570,9 @@ class Array(DatamijnObject):
         if len(self) == 0:
             out = out.replace("\n", "")
         return out.strip()
+    
+    def _json(self) -> JsonType:
+        return [elem._json() for elem in self]
 
 class ListArray(list, Array):
     def __add__(self, other):
@@ -584,6 +601,9 @@ class String(ListArray):
     def _pretty_repr(self):
         string = str(self).replace('"', '\"')
         return '"' + str(self) + '"'
+    
+    def _json(self) -> JsonType:
+        return str(self)
 
 class ByteString(bytes, Array):
     _concat = True
@@ -811,6 +831,9 @@ class Struct(dict, DatamijnObject):
         if len(self._contents) == 0:
             out = out.replace("\n", "")
         return out.strip()
+    
+    def _json(self) -> JsonType:
+        return {key: value._json() if value is not None else None for key, value in self.items()}
 
 class LenientStruct(Struct):
     """
