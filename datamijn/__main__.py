@@ -25,7 +25,7 @@ def cli(struct_filename, binary_filename, output, show_private, lenient):
     if output == "pretty_repr":
         print(result._pretty_repr())
     elif output == "json":
-        print(json.dumps(result._json(), indent=4))
+        print(json.dumps(result._json(), indent=4, ensure_ascii=False))
     elif output == "browser":
         binary_file = open(binary_filename, "rb")
         from datamijn.browser import DatamijnBrowser

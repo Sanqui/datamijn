@@ -572,7 +572,7 @@ class Array(DatamijnObject):
         return out.strip()
     
     def _json(self) -> JsonType:
-        return [elem._json() for elem in self]
+        return [elem._json() if elem is not None else None for elem in self]
 
 class ListArray(list, Array):
     def __add__(self, other):
@@ -1567,6 +1567,9 @@ class ForeignKey(DatamijnObject):
     
     def __str__(self):
         return str(self._object)
+    
+    def _json(self) -> JsonType:
+        return {"_type": "reference", "_field_name": self._field_name, "_key": self._key}
 
 class ForeignListAssignment():
     def __init__(self, name):
