@@ -1,7 +1,7 @@
 import operator
 from io import BytesIO, BufferedIOBase
 from typing import Union
-from datamijn.utils import UPPERCASE, full_type_name, ResolveError, ParseError, ForeignKeyError, ReadError, SaveNotImplementedError, MakeError, JsonType
+from datamijn.utils import UPPERCASE, JsonTypes, full_type_name, ResolveError, ParseError, ForeignKeyError, ReadError, SaveNotImplementedError, MakeError, JsonType
 from datamijn.traceint import TraceInt, Source
 
 class IOWithBits(BufferedIOBase):
@@ -572,7 +572,7 @@ class Array(DatamijnObject):
         return out.strip()
     
     def _json(self) -> JsonType:
-        return [elem._json() if elem is not None else None for elem in self]
+        return [elem if type(elem) in JsonTypes else elem._json() for elem in self]
 
 class ListArray(list, Array):
     def __add__(self, other):
@@ -833,7 +833,11 @@ class Struct(dict, DatamijnObject):
         return out.strip()
     
     def _json(self) -> JsonType:
-        return {key: value._json() if value is not None else None for key, value in self.items()}
+        return {
+            key: value if type(value) in JsonTypes else value._json()
+            for key, value in self.items()
+            if not key.startswith("_")
+        }
 
 class LenientStruct(Struct):
     """

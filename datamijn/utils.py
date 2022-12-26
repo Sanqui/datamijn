@@ -61,4 +61,5 @@ class ReadError(DatamijnError): pass
 
 class SaveNotImplementedError(DatamijnPathError): pass
 
-JsonType = Union[None, int, str, bool, list, dict]
+JsonTypes = (type(None), int, str, bool, list, dict)
+JsonType = Union[type(None), int, str, bool, list, dict]
